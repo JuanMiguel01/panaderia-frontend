@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    
     "lint": "eslint .",
-    "start": "react-scripts start",
+    
     
     "deploy": "npm run build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+     "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
   "dependencies": {
     "react": "^19.1.0",

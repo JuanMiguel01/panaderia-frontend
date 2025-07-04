@@ -1,5 +1,6 @@
 // src/services/api.js
-const API_URL = 'http://localhost:3001';
+
+const API_URL = 'https://panaderia-backend-uy2k.onrender.com';
 
 /**
  * Función genérica para realizar llamadas fetch a la API.
