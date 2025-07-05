@@ -54,6 +54,12 @@ function App() {
     }
   }, [handleLogout]);
 
+  // ✅ NUEVO: Función para verificar si el usuario puede eliminar ventas
+  const canDeleteSale = useCallback((user) => {
+    // Solo el administrador puede eliminar ventas
+    return user?.role === 'admin' || user?.role === 'administrador';
+  }, []);
+
   // Verificar token guardado al montar el componente
   useEffect(() => {
     const savedToken = localStorage.getItem('jwt_token');
@@ -110,17 +116,19 @@ function App() {
     newSocket.on('sale:created', handleBatchEvents);
     newSocket.on('sale:updated', handleBatchEvents);
     newSocket.on('sale:deleted', handleBatchEvents);
-      if (user?.role === 'admin') {
-    newSocket.on('user:registered', (userData) => {
-      console.log('📧 Nuevo usuario registrado:', userData.email);
-      // Aquí podrías mostrar una notificación si quieres
-    });
+    
+    if (user?.role === 'admin') {
+      newSocket.on('user:registered', (userData) => {
+        console.log('📧 Nuevo usuario registrado:', userData.email);
+        // Aquí podrías mostrar una notificación si quieres
+      });
 
-    newSocket.on('user:approved', (userData) => {
-      console.log('✅ Usuario aprobado:', userData.email);
-      // Aquí podrías mostrar una notificación si quieres
-    });
-  }
+      newSocket.on('user:approved', (userData) => {
+        console.log('✅ Usuario aprobado:', userData.email);
+        // Aquí podrías mostrar una notificación si quieres
+      });
+    }
+    
     // Cleanup cuando el componente se desmonte o cambie el usuario
     return () => {
       newSocket.off('connect');
@@ -131,6 +139,8 @@ function App() {
       newSocket.off('sale:created');
       newSocket.off('sale:updated');
       newSocket.off('sale:deleted');
+      newSocket.off('user:registered');
+      newSocket.off('user:approved');
       newSocket.disconnect();
     };
   }, [user, token]); // SOLO user y token, sin fetchBatches
@@ -168,13 +178,22 @@ function App() {
       setError(err.message || "Error al actualizar venta.");
     }
   }, [handleLogout]);
+
+  // ✅ MODIFICADO: Verificar permisos antes de eliminar
   const handleDeleteSale = useCallback(async (...args) => {
-  try {
-    await api.deleteSale(...args, handleLogout);
-  } catch (err) {
-    setError(err.message || "Error al eliminar venta.");
-  }
-}, [handleLogout]);
+    try {
+      // Verificar permisos antes de hacer la llamada
+      if (!canDeleteSale(user)) {
+        setError("Solo los administradores pueden eliminar ventas.");
+        return;
+      }
+      
+      await api.deleteSale(...args, handleLogout);
+    } catch (err) {
+      setError(err.message || "Error al eliminar venta.");
+    }
+  }, [handleLogout, canDeleteSale, user]);
+
   if (isLoading) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-amber-50 to-orange-100">
@@ -224,6 +243,7 @@ function App() {
           handleCreateSale={handleCreateSale}
           handleUpdateSale={handleUpdateSale}
           handleDeleteSale={handleDeleteSale}
+          canDeleteSale={canDeleteSale} // ✅ NUEVO: Pasar función de permisos
         />
       )}
     </>

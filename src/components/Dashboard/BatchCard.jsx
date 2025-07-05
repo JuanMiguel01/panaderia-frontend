@@ -1,88 +1,118 @@
-// src/components/Dashboard/BatchCard.jsx
-import React, { useMemo } from 'react';
-import { TrashIcon } from '../icons';
-import { SalesList } from './SalesList';
-import { AddSaleForm } from './AddSaleForm';
-import { formatCurrency } from '../../utils/formatters';
-export const StatCard = ({ label, value, color, size = 'lg' }) => (
-  <div>
-    <p className="text-xs text-brown-500">{label}</p>
-    <p className={`font-bold ${size === 'lg' ? 'text-lg' : 'text-base'} ${color}`}>
-      {value}
-    </p>
-  </div>
-);
-export function BatchCard({ batch, onDeleteBatch, onCreateSale, onUpdateSale, onDeleteSale }) {
-  console.log('BatchCard props:', { onCreateSale, onUpdateSale, onDeleteSale, onDeleteBatch });
-  console.log('onCreateSale type:', typeof onCreateSale);
-  const { id, breadType, quantityMade, price, sales = [], createdBy } = batch;
+// src/components/Dashboard/BatchCard.jsx - EJEMPLO DE COMO IMPLEMENTAR PERMISOS
 
-  // Usamos useMemo para evitar recalcular en cada render
-  const stats = useMemo(() => {
-    const totalSold = sales.reduce((sum, sale) => sum + sale.quantitySold, 0);
-    const remaining = quantityMade - totalSold;
-    const paidRevenue = sales
-      .filter(s => s.isPaid)
-      .reduce((sum, s) => sum + (s.quantitySold * price), 0);
-    const pendingRevenue = sales
-      .filter(s => !s.isPaid)
-      .reduce((sum, s) => sum + (s.quantitySold * price), 0);
-    
-    return { totalSold, remaining, paidRevenue, pendingRevenue, totalRevenue: paidRevenue + pendingRevenue };
-  }, [sales, quantityMade, price]);
+export function BatchCard({ 
+  batch, 
+  user, // ✅ NUEVO: Recibir usuario
+  onCreateSale, 
+  onUpdateSale, 
+  onDeleteSale, 
+  onDeleteBatch,
+  canDeleteSale, // ✅ NUEVO: Recibir función de permisos
+  isAdmin // ✅ NUEVO: Recibir estado de admin
+}) {
+  // ... resto del código del componente ...
 
   return (
-    <article className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-      {/* Header de la tarjeta */}
-      <header className="p-5 border-b border-cream-200">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="text-xl font-bold text-brown-800">{breadType}</h3>
-            <p className="text-lg font-semibold text-accent-600">{formatCurrency(price)} / ud.</p>
-            <p className="text-xs text-brown-400 mt-1">Creado por: {createdBy || 'N/A'}</p>
-          </div>
-          <button 
-            onClick={() => onDeleteBatch(id)} 
-            className="p-2 rounded-full text-brown-500 hover:bg-red-100 hover:text-red-600 transition-colors"
-            aria-label={`Eliminar lote de ${breadType}`}
-          >
-            <TrashIcon />
-          </button>
+    <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all duration-300">
+      {/* Header del lote */}
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <h3 className="text-xl font-bold text-brown-700">{batch.breadType}</h3>
+          <p className="text-brown-600">Creado por: {batch.createdBy}</p>
         </div>
         
-        {/* Estadísticas principales */}
-        <div className="grid grid-cols-3 gap-3 text-center mb-4">
-          <StatCard label="Hecho" value={quantityMade} color="text-brown-800" />
-          <StatCard label="Vendido" value={stats.totalSold} color="text-green-600" />
-          <StatCard label="Restante" value={stats.remaining} color="text-orange-500" />
-        </div>
+        {/* ✅ MODIFICADO: Botón de eliminar lote solo para administradores */}
+        {isAdmin && (
+          <button
+            onClick={() => onDeleteBatch(batch.id)}
+            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            title="Eliminar lote"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        )}
+      </div>
 
-        {/* Resumen de ingresos */}
-        <div className="bg-cream-100 p-3 rounded-lg grid grid-cols-3 gap-2 text-center">
-            <StatCard label="Cobrado" value={formatCurrency(stats.paidRevenue)} color="text-green-700" size="base" />
-            <StatCard label="Pendiente" value={formatCurrency(stats.pendingRevenue)} color="text-amber-600" size="base" />
-            <StatCard label="Total" value={formatCurrency(stats.totalRevenue)} color="text-blue-700" size="base" />
+      {/* Información del lote */}
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <p className="text-sm text-brown-600">Cantidad</p>
+          <p className="font-semibold text-brown-800">{batch.quantityMade}</p>
         </div>
-      </header>
+        <div>
+          <p className="text-sm text-brown-600">Precio</p>
+          <p className="font-semibold text-brown-800">${batch.price}</p>
+        </div>
+      </div>
 
       {/* Lista de ventas */}
-      <div className="p-5 flex-grow">
-        <SalesList 
-          sales={sales} 
-          batchId={id} 
-          onUpdateSale={onUpdateSale}
-          onDeleteSale={onDeleteSale}
-        />
+      <div className="space-y-3">
+        <h4 className="font-semibold text-brown-700">Ventas:</h4>
+        
+        {batch.sales.map(sale => (
+          <div key={sale.id} className="flex items-center justify-between p-3 bg-brown-50 rounded-lg">
+            <div className="flex-1">
+              <p className="font-medium text-brown-800">{sale.personName}</p>
+              <p className="text-sm text-brown-600">Cantidad: {sale.quantitySold}</p>
+              <div className="flex space-x-2 mt-1">
+                <span className={`px-2 py-1 rounded-full text-xs ${
+                  sale.isPaid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}>
+                  {sale.isPaid ? 'Pagado' : 'Pendiente'}
+                </span>
+                <span className={`px-2 py-1 rounded-full text-xs ${
+                  sale.isDelivered ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {sale.isDelivered ? 'Entregado' : 'No entregado'}
+                </span>
+              </div>
+            </div>
+            
+            {/* ✅ MODIFICADO: Botones de acción con permisos */}
+            <div className="flex space-x-2">
+              {/* Botón de marcar como pagado - solo admins */}
+              {isAdmin && !sale.isPaid && (
+                <button
+                  onClick={() => onUpdateSale(batch.id, sale.id, { isPaid: true })}
+                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                  title="Marcar como pagado"
+                >
+                  💰
+                </button>
+              )}
+              
+              {/* Botón de marcar como entregado - todos los usuarios */}
+              {!sale.isDelivered && (
+                <button
+                  onClick={() => onUpdateSale(batch.id, sale.id, { isDelivered: true })}
+                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Marcar como entregado"
+                >
+                  📦
+                </button>
+              )}
+              
+              {/* ✅ MODIFICADO: Botón de eliminar venta - solo admins */}
+              {canDeleteSale && canDeleteSale(user) && (
+                <button
+                  onClick={() => onDeleteSale(batch.id, sale.id)}
+                  className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Eliminar venta"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        
+        {/* Formulario para añadir nueva venta */}
+        <AddSaleForm onCreateSale={(saleData) => onCreateSale(batch.id, saleData)} />
       </div>
-      
-      {/* Formulario para añadir venta */}
-      <footer className="p-5 border-t border-cream-200 bg-cream-100 mt-auto">
-        <AddSaleForm 
-          batchId={id}
-          remaining={stats.remaining}
-          onCreateSale={onCreateSale}
-        />
-      </footer>
-    </article>
+    </div>
   );
 }

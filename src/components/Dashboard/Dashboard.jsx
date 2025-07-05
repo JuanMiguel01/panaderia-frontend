@@ -14,7 +14,8 @@ export function Dashboard({
   handleDeleteBatch, 
   handleCreateSale, 
   handleUpdateSale,
-  handleDeleteSale
+  handleDeleteSale,
+  canDeleteSale // ✅ NUEVO: Recibir función de permisos
 }) {
   const [activeTab, setActiveTab] = useState('batches');
   
@@ -95,10 +96,13 @@ export function Dashboard({
                       <BatchCard 
                         key={batch.id} 
                         batch={batch} 
+                        user={user} // ✅ NUEVO: Pasar usuario
                         onCreateSale={handleCreateSale}
                         onUpdateSale={handleUpdateSale}
                         onDeleteSale={handleDeleteSale}
                         onDeleteBatch={handleDeleteBatch}
+                        canDeleteSale={canDeleteSale} // ✅ NUEVO: Pasar función de permisos
+                        isAdmin={isAdmin} // ✅ NUEVO: Pasar estado de admin
                       />
                     ))}
                   </div>
