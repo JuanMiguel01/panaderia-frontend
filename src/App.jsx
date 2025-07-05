@@ -5,7 +5,7 @@ import { api } from './services/api';
 import { Auth } from './components/Auth';
 import { Dashboard } from './components/Dashboard/Dashboard';
 
-const API_URL = 'http://localhost:3001';
+const API_URL = 'https://panaderia-backend-uy2k.onrender.com';
 
 function App() {
   const [user, setUser] = useState(null);
