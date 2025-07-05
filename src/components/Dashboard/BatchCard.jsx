@@ -1,11 +1,17 @@
 // src/components/Dashboard/BatchCard.jsx
 import React, { useMemo } from 'react';
 import { TrashIcon } from '../icons';
-import { StatCard } from '../StatCard';
 import { SalesList } from './SalesList';
 import { AddSaleForm } from './AddSaleForm';
 import { formatCurrency } from '../../utils/formatters';
-
+export const StatCard = ({ label, value, color, size = 'lg' }) => (
+  <div>
+    <p className="text-xs text-brown-500">{label}</p>
+    <p className={`font-bold ${size === 'lg' ? 'text-lg' : 'text-base'} ${color}`}>
+      {value}
+    </p>
+  </div>
+);
 export function BatchCard({ batch, onDeleteBatch, onCreateSale, onUpdateSale, onDeleteSale }) {
   console.log('BatchCard props:', { onCreateSale, onUpdateSale, onDeleteSale, onDeleteBatch });
   console.log('onCreateSale type:', typeof onCreateSale);
