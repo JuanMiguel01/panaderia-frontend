@@ -5,7 +5,7 @@ import { BatchCard } from './BatchCard';
 import { Header } from './Header';
 import { UserManagement } from './UserManagement';
 import { formatDate } from '../../utils/formatters';
-
+import { AddSaleForm } from './AddSaleForm'; 
 export function Dashboard({ 
   user, 
   batches, 

@@ -1,5 +1,5 @@
 // src/components/Dashboard/BatchCard.jsx - EJEMPLO DE COMO IMPLEMENTAR PERMISOS
-
+import { AddSaleForm } from './AddSaleForm'; 
 export function BatchCard({ 
   batch, 
   user, // ✅ NUEVO: Recibir usuario
