@@ -1,8 +1,7 @@
 // src/components/Dashboard/BatchCard.jsx
 import React, { useMemo } from 'react';
 import { TrashIcon } from '../icons';
-
-import { StatCard } from '../common/StatCard.jsx';
+import { StatCard } from '../StatCard';
 import { SalesList } from './SalesList';
 import { AddSaleForm } from './AddSaleForm';
 import { formatCurrency } from '../../utils/formatters';
