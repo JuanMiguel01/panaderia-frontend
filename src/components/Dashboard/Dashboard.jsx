@@ -4,8 +4,10 @@ import { AddBatchForm } from './AddBatchForm';
 import { BatchCard } from './BatchCard';
 import { Header } from './Header';
 import { UserManagement } from './UserManagement';
+import { StockCard } from './StockCard'; // ✅ NUEVO: Importar StockCard
 import { formatDate } from '../../utils/formatters';
 import { AddSaleForm } from './AddSaleForm'; 
+
 export function Dashboard({ 
   user, 
   batches, 
@@ -15,7 +17,7 @@ export function Dashboard({
   handleCreateSale, 
   handleUpdateSale,
   handleDeleteSale,
-  canDeleteSale // ✅ NUEVO: Recibir función de permisos
+  canDeleteSale
 }) {
   const [activeTab, setActiveTab] = useState('batches');
   
@@ -34,32 +36,54 @@ export function Dashboard({
   );
 
   const isAdmin = user?.role === 'admin';
+  
+  // ✅ NUEVO: Verificar si el usuario puede ver la tarjeta de estiba
+  const canViewStockCard = user?.role === 'admin' || user?.permissions?.canViewStockCard;
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
       <Header user={user} onLogout={onLogout} />
 
       <main className="max-w-7xl mx-auto">
-        {/* Navegación por pestañas solo para administradores */}
-        {isAdmin && (
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-2 mb-8">
-            <div className="flex space-x-2">
+        {/* ✅ MODIFICADO: Navegación por pestañas con nueva opción */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-2 mb-8">
+          <div className="flex space-x-2 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('batches')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap ${
+                activeTab === 'batches'
+                  ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-md'
+                  : 'text-brown-700 hover:bg-brown-100'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <span>🍞</span>
+                <span>Lotes de Pan</span>
+              </div>
+            </button>
+            
+            {/* ✅ NUEVO: Pestaña de Tarjeta de Estiba */}
+            {canViewStockCard && (
               <button
-                onClick={() => setActiveTab('batches')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
-                  activeTab === 'batches'
-                    ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-md'
+                onClick={() => setActiveTab('stockcard')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap ${
+                  activeTab === 'stockcard'
+                    ? 'bg-gradient-to-r from-green-500 to-blue-500 text-white shadow-md'
                     : 'text-brown-700 hover:bg-brown-100'
                 }`}
               >
                 <div className="flex items-center space-x-2">
-                  <span>🍞</span>
-                  <span>Lotes de Pan</span>
+                  <span>📊</span>
+                  <span>Tarjeta de Estiba</span>
                 </div>
               </button>
+            )}
+            
+            {/* Pestaña de usuarios solo para administradores */}
+            {isAdmin && (
               <button
                 onClick={() => setActiveTab('users')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 whitespace-nowrap ${
                   activeTab === 'users'
                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md'
                     : 'text-brown-700 hover:bg-brown-100'
@@ -70,11 +94,11 @@ export function Dashboard({
                   <span>Usuarios</span>
                 </div>
               </button>
-            </div>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Contenido según la pestaña activa */}
+        {/* ✅ MODIFICADO: Contenido según la pestaña activa */}
         {activeTab === 'batches' ? (
           <>
             <AddBatchForm onCreateBatch={handleCreateBatch} />
@@ -96,13 +120,13 @@ export function Dashboard({
                       <BatchCard 
                         key={batch.id} 
                         batch={batch} 
-                        user={user} // ✅ NUEVO: Pasar usuario
+                        user={user}
                         onCreateSale={handleCreateSale}
                         onUpdateSale={handleUpdateSale}
                         onDeleteSale={handleDeleteSale}
                         onDeleteBatch={handleDeleteBatch}
-                        canDeleteSale={canDeleteSale} // ✅ NUEVO: Pasar función de permisos
-                        isAdmin={isAdmin} // ✅ NUEVO: Pasar estado de admin
+                        canDeleteSale={canDeleteSale}
+                        isAdmin={isAdmin}
                       />
                     ))}
                   </div>
@@ -110,6 +134,13 @@ export function Dashboard({
               ))
             )}
           </>
+        ) : activeTab === 'stockcard' ? (
+          // ✅ NUEVO: Pestaña de Tarjeta de Estiba
+          <StockCard 
+            user={user} 
+            batches={batches} 
+            onLogout={onLogout} 
+          />
         ) : (
           // Pestaña de usuarios (solo para administradores)
           <UserManagement onLogout={onLogout} />
