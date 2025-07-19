@@ -1,7 +1,7 @@
 // src/components/Dashboard/UserManagement.jsx
 import React, { useState, useEffect } from 'react';
-
 import { api } from '../../services/api';
+
 export function UserManagement({ onLogout }) {
   const [users, setUsers] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
@@ -9,8 +9,8 @@ export function UserManagement({ onLogout }) {
   const [error, setError] = useState(null);
   const [showAddUserForm, setShowAddUserForm] = useState(false);
   const [newUser, setNewUser] = useState({
-    username: '',
     email: '',
+    password: '',
     role: 'employee',
     permissions: {
       canViewStockCard: false,
@@ -35,20 +35,7 @@ export function UserManagement({ onLogout }) {
 
   const loadUsers = async () => {
     try {
-      const response = await fetch('/api/users', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      
-      if (response.status === 401) {
-        onLogout();
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error('Error al cargar usuarios');
-      }
-      
-      const data = await response.json();
+      const data = await api.getActiveUsers(onLogout);
       setUsers(data);
       setError(null);
     } catch (error) {
@@ -61,20 +48,7 @@ export function UserManagement({ onLogout }) {
 
   const loadPendingUsers = async () => {
     try {
-      const response = await fetch('/api/users/pending', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      
-      if (response.status === 401) {
-        onLogout();
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error('Error al cargar usuarios pendientes');
-      }
-      
-      const data = await response.json();
+      const data = await api.getPendingUsers(onLogout);
       setPendingUsers(data);
     } catch (error) {
       console.error('Error loading pending users:', error);
@@ -85,20 +59,7 @@ export function UserManagement({ onLogout }) {
   // Aprobar usuario pendiente
   const approveUser = async (userId) => {
     try {
-      const response = await fetch(`/api/users/${userId}/approve`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      
-      if (response.status === 401) {
-        onLogout();
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error('Error al aprobar usuario');
-      }
-      
+      await api.approveUser(userId, onLogout);
       await loadUsers();
       await loadPendingUsers();
       setError(null);
@@ -111,20 +72,7 @@ export function UserManagement({ onLogout }) {
   // Rechazar usuario pendiente
   const rejectUser = async (userId) => {
     try {
-      const response = await fetch(`/api/users/${userId}/reject`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      
-      if (response.status === 401) {
-        onLogout();
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error('Error al rechazar usuario');
-      }
-      
+      await api.deleteUser(userId, onLogout);
       await loadPendingUsers();
       setError(null);
     } catch (error) {
@@ -138,20 +86,7 @@ export function UserManagement({ onLogout }) {
     if (!window.confirm('¿Estás seguro de que quieres eliminar este usuario?')) return;
     
     try {
-      const response = await fetch(`/api/users/${userId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      
-      if (response.status === 401) {
-        onLogout();
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error('Error al eliminar usuario');
-      }
-      
+      await api.deleteUser(userId, onLogout);
       await loadUsers();
       setError(null);
     } catch (error) {
@@ -163,24 +98,7 @@ export function UserManagement({ onLogout }) {
   // Actualizar rol y permisos
   const updateUser = async (userId, updates) => {
     try {
-      const response = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(updates)
-      });
-      
-      if (response.status === 401) {
-        onLogout();
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error('Error al actualizar usuario');
-      }
-      
+      await api.updateUser(userId, updates, onLogout);
       await loadUsers();
       setError(null);
     } catch (error) {
@@ -193,27 +111,11 @@ export function UserManagement({ onLogout }) {
   const createUser = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(newUser)
-      });
-      
-      if (response.status === 401) {
-        onLogout();
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error('Error al crear usuario');
-      }
+      await api.createUser(newUser, onLogout);
       
       setNewUser({
-        username: '',
         email: '',
+        password: '',
         role: 'employee',
         permissions: {
           canViewStockCard: false,
@@ -278,24 +180,24 @@ export function UserManagement({ onLogout }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nombre de usuario
-                </label>
-                <input
-                  type="text"
-                  value={newUser.username}
-                  onChange={(e) => setNewUser({...newUser, username: e.target.value})}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email
                 </label>
                 <input
                   type="email"
                   value={newUser.email}
                   onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contraseña
+                </label>
+                <input
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
                   className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -409,12 +311,12 @@ export function UserManagement({ onLogout }) {
                 <div className="flex items-center space-x-3">
                   <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
                     <span className="text-gray-600 font-medium text-sm">
-                      {user.username.charAt(0).toUpperCase()}
+                      {user.email.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">{user.username}</p>
-                    <p className="text-sm text-gray-600">{user.email}</p>
+                    <p className="font-medium text-gray-900">{user.email}</p>
+                    <p className="text-sm text-gray-600">Rol: {roles.find(r => r.value === user.role)?.label}</p>
                   </div>
                 </div>
                 <div className="flex space-x-2">
@@ -518,12 +420,12 @@ function UserRow({ user, roles, onUpdate, onDelete }) {
           <div className="flex items-center space-x-4">
             <div className="h-12 w-12 rounded-full bg-gray-300 flex items-center justify-center">
               <span className="text-gray-600 font-medium">
-                {user.username.charAt(0).toUpperCase()}
+                {user.email.charAt(0).toUpperCase()}
               </span>
             </div>
             <div>
-              <p className="font-medium text-gray-900">{user.username}</p>
-              <p className="text-sm text-gray-500">{user.email}</p>
+              <p className="font-medium text-gray-900">{user.email}</p>
+              <p className="text-sm text-gray-500">ID: {user.id}</p>
             </div>
             <span className={`px-3 py-1 rounded-full text-xs font-medium ${currentRole?.color}`}>
               {currentRole?.label}
