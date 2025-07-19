@@ -39,4 +39,9 @@ export const api = {
     // Nuevos métodos para gestión de usuarios
     getPendingUsers: (onAuthError) => _fetch('/api/users/pending', {}, onAuthError),
     approveUser: (userId, onAuthError) => _fetch(`/api/users/${userId}/approve`, { method: 'PATCH' }, onAuthError),
+    
+    getActiveUsers: (onAuthError) => _fetch('/api/users/active', {}, onAuthError),
+    deleteUser: (userId, onAuthError) => _fetch(`/api/users/${userId}`, { method: 'DELETE' }, onAuthError),
+    updateUser: (userId, data, onAuthError) => _fetch(`/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(data) }, onAuthError),
+    createUser: (data, onAuthError) => _fetch('/api/users', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
 };
