@@ -27,8 +27,11 @@ async function _fetch(endpoint, options = {}, onAuthError) {
 
 // Exportamos un objeto con todos los métodos de la API.
 export const api = {
+    // Métodos de autenticación
     login: (email, password) => _fetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     register: (email, password) => _fetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    
+    // Métodos de lotes y ventas
     getBatches: (onAuthError) => _fetch('/api/batches', {}, onAuthError),
     createBatch: (data, onAuthError) => _fetch('/api/batches', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
     deleteBatch: (batchId, onAuthError) => _fetch(`/api/batches/${batchId}`, { method: 'DELETE' }, onAuthError),
@@ -36,10 +39,9 @@ export const api = {
     updateSale: (batchId, saleId, data, onAuthError) => _fetch(`/api/batches/${batchId}/sales/${saleId}`, { method: 'PATCH', body: JSON.stringify(data) }, onAuthError),
     deleteSale: (batchId, saleId, onAuthError) => _fetch(`/api/batches/${batchId}/sales/${saleId}`, { method: 'DELETE' }, onAuthError),
     
-    // Nuevos métodos para gestión de usuarios
+    // Métodos de gestión de usuarios
     getPendingUsers: (onAuthError) => _fetch('/api/users/pending', {}, onAuthError),
     approveUser: (userId, onAuthError) => _fetch(`/api/users/${userId}/approve`, { method: 'PATCH' }, onAuthError),
-    
     getActiveUsers: (onAuthError) => _fetch('/api/users/active', {}, onAuthError),
     deleteUser: (userId, onAuthError) => _fetch(`/api/users/${userId}`, { method: 'DELETE' }, onAuthError),
     updateUser: (userId, data, onAuthError) => _fetch(`/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(data) }, onAuthError),
