@@ -12,6 +12,36 @@ export function StockCard({ batches }) {
   });
   const [filter, setFilter] = useState('all');
 
+  // ✅ Nuevo estado para gestionar la edición en la tabla
+  const [editingBatch, setEditingBatch] = useState(null);
+  const [newDate, setNewDate] = useState('');
+
+  const handleEditClick = (batch) => {
+    setEditingBatch(batch.id);
+    setNewDate(new Date(batch.date).toISOString().split('T')[0]);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingBatch(null);
+  };
+
+  const handleSaveDate = async (batchId) => {
+    try {
+      // Asumiendo que tienes una función api.updateBatchDate
+      // Necesitarás implementar `api.updateBatchDate` en tu capa de servicios/API
+      // Por ejemplo: await api.updateBatchDate(batchId, newDate);
+      console.log(`Guardando fecha ${newDate} para el lote ${batchId}`); // Placeholder para la llamada a la API
+      setEditingBatch(null);
+      // La actualización se verá reflejada por el socket o necesitarás refetch
+      // Si usas SWR, React Query, o Redux, la invalidación de caché podría ser automática.
+      // De lo contrario, podrías necesitar recargar los batches:
+      // fetchBatches(); // Una función que obtenga los batches nuevamente
+    } catch (error) {
+      console.error("Error al actualizar la fecha:", error);
+      alert("No se pudo actualizar la fecha.");
+    }
+  };
+
   // Filtrar batches por fecha
   const filteredBatches = batches.filter(batch => {
     const batchDate = new Date(batch.date).toISOString().split('T')[0];
@@ -85,7 +115,7 @@ export function StockCard({ batches }) {
         </div>
       </div>
 
-      {/* Tabla de datos */}
+      {/* Tabla de datos MODIFICADA */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         {finalFilteredData.length === 0 ? (
           <div className="text-center py-12">
@@ -106,6 +136,8 @@ export function StockCard({ batches }) {
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Por Vender</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ingresos</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creado Por</th>
+                  {/* ✅ Nueva columna para Acciones */}
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -119,7 +151,14 @@ export function StockCard({ batches }) {
                   
                   return (
                     <tr key={batch.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(batch.date)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {/* Lógica para editar la fecha */}
+                        {editingBatch === batch.id ? (
+                            <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} className="input-field !py-1" />
+                        ) : (
+                            formatDate(batch.date)
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{batch.breadType}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{batch.quantityMade}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${batch.price.toFixed(2)}</td>
@@ -133,6 +172,17 @@ export function StockCard({ batches }) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">${revenue.toFixed(2)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{batch.createdBy}</td>
+                      {/* ✅ Celda de Acciones */}
+                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                        {editingBatch === batch.id ? (
+                            <div className="flex space-x-2 justify-center">
+                                <button onClick={() => handleSaveDate(batch.id)} className="text-green-600 hover:text-green-900">Guardar</button>
+                                <button onClick={handleCancelEdit} className="text-gray-600 hover:text-gray-900">Cancelar</button>
+                            </div>
+                        ) : (
+                            <button onClick={() => handleEditClick(batch)} className="text-blue-600 hover:text-blue-900">Editar Fecha</button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

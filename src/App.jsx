@@ -151,7 +151,8 @@ const getPermissions = useCallback(() => {
     newSocket.on('sale:created', handleBatchEvents);
     newSocket.on('sale:updated', handleBatchEvents);
     newSocket.on('sale:deleted', handleBatchEvents);
-    
+    newSocket.on('batch:updated', handleBatchEvents); // Para refrescar al cambiar la fecha
+
     if (user?.role === 'admin') {
       newSocket.on('user:registered', (userData) => {
         console.log('📧 Nuevo usuario registrado:', userData.email);
@@ -171,6 +172,7 @@ const getPermissions = useCallback(() => {
       newSocket.off('connect_error');
       newSocket.off('batch:created');
       newSocket.off('batch:deleted');
+      newSocket.off('batch:updated');
       newSocket.off('sale:created');
       newSocket.off('sale:updated');
       newSocket.off('sale:deleted');
