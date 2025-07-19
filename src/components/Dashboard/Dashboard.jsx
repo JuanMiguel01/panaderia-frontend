@@ -1,8 +1,11 @@
 // src/components/Dashboard/Dashboard.jsx
+
 import React, { useState, useMemo } from 'react';
 import { AddBatchForm } from './AddBatchForm';
 import { BatchCard } from './BatchCard';
 import { UserManagement } from './UserManagement'; // Asumiendo que está aquí
+import { StockCard } from './StockCard'; // Importar
+import { InventoryManagement } from './InventoryManagement'; // Importar
 
 // Un pequeño componente para las secciones expandibles
 function CollapsibleSection({ title, children }) {
@@ -109,13 +112,21 @@ export function Dashboard({
       </header>
 
       {/* Pestañas de Navegación */}
-      <div className="mb-6 border-b-2 border-amber-200">
+       <div className="mb-6 border-b-2 border-amber-200">
         <nav className="-mb-0.5 flex space-x-6">
-          <button onClick={() => setActiveTab('dashboard')} className={`py-2 px-1 font-medium ${activeTab === 'dashboard' ? 'border-b-2 border-amber-600 text-amber-700' : 'text-gray-500'}`}>
-            📦 Dashboard
+          <button onClick={() => setActiveTab('dashboard')} className={`tab-button ${activeTab === 'dashboard' && 'tab-active'}`}>
+            📦 Ventas Diarias
+          </button>
+          <button onClick={() => setActiveTab('stock')} className={`tab-button ${activeTab === 'stock' && 'tab-active'}`}>
+            📊 Tarjeta de Estiba
           </button>
           {permissions.isAdmin && (
-            <button onClick={() => setActiveTab('users')} className={`py-2 px-1 font-medium ${activeTab === 'users' ? 'border-b-2 border-amber-600 text-amber-700' : 'text-gray-500'}`}>
+            <button onClick={() => setActiveTab('inventory')} className={`tab-button ${activeTab === 'inventory' && 'tab-active'}`}>
+              🌾 Inventario Insumos
+            </button>
+          )}
+          {permissions.isAdmin && (
+            <button onClick={() => setActiveTab('users')} className={`tab-button ${activeTab === 'users' && 'tab-active'}`}>
               👥 Gestión de Usuarios
             </button>
           )}
@@ -187,7 +198,24 @@ export function Dashboard({
           </div>
         </>
       )}
+ {/* Contenido de la pestaña de Ventas Diarias */}
+      {activeTab === 'dashboard' && (
+        <>
+          {/* ... (Resumen financiero, filtros y lista de lotes sin cambios) ... */}
+        </>
+      )}
 
+      {/* ✅ NUEVO: Contenido de la pestaña de Tarjeta de Estiba */}
+      {activeTab === 'stock' && (
+        <StockCard batches={batches} />
+      )}
+
+      {/* ✅ NUEVO: Contenido de la pestaña de Inventario de Insumos */}
+      {activeTab === 'inventory' && permissions.isAdmin && (
+        <InventoryManagement onLogout={onLogout} />
+      )}
+
+      {/* Contenido de la pestaña de Gestión de Usuarios */}
       {activeTab === 'users' && permissions.isAdmin && (
         <UserManagement onLogout={onLogout} />
       )}

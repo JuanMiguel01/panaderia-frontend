@@ -35,6 +35,7 @@ export const api = {
     getBatches: (onAuthError) => _fetch('/api/batches', {}, onAuthError),
     createBatch: (data, onAuthError) => _fetch('/api/batches', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
     deleteBatch: (batchId, onAuthError) => _fetch(`/api/batches/${batchId}`, { method: 'DELETE' }, onAuthError),
+    updateBatchDate: (batchId, date, onAuthError) => _fetch(`/api/batches/${batchId}/date`, { method: 'PATCH', body: JSON.stringify({ date }) }, onAuthError), // NUEVO
     createSale: (batchId, data, onAuthError) => _fetch(`/api/batches/${batchId}/sales`, { method: 'POST', body: JSON.stringify(data) }, onAuthError),
     updateSale: (batchId, saleId, data, onAuthError) => _fetch(`/api/batches/${batchId}/sales/${saleId}`, { method: 'PATCH', body: JSON.stringify(data) }, onAuthError),
     deleteSale: (batchId, saleId, onAuthError) => _fetch(`/api/batches/${batchId}/sales/${saleId}`, { method: 'DELETE' }, onAuthError),
@@ -46,4 +47,10 @@ export const api = {
     deleteUser: (userId, onAuthError) => _fetch(`/api/users/${userId}`, { method: 'DELETE' }, onAuthError),
     updateUser: (userId, data, onAuthError) => _fetch(`/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(data) }, onAuthError),
     createUser: (data, onAuthError) => _fetch('/api/users', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
+
+    // Métodos de inventario de insumos (NUEVO)
+    getInventory: (onAuthError) => _fetch('/api/inventory', {}, onAuthError),
+    createInventoryItem: (data, onAuthError) => _fetch('/api/inventory', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
+    updateInventoryItem: (itemId, change, onAuthError) => _fetch(`/api/inventory/${itemId}`, { method: 'PATCH', body: JSON.stringify({ change }) }, onAuthError),
+    deleteInventoryItem: (itemId, onAuthError) => _fetch(`/api/inventory/${itemId}`, { method: 'DELETE' }, onAuthError),
 };

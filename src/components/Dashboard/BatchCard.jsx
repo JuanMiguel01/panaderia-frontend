@@ -1,7 +1,7 @@
 // src/components/Dashboard/BatchCard.jsx
 import React from 'react';
 import { AddSaleForm } from './AddSaleForm';
-
+import {api} from '../../services/api';
 export function BatchCard({ 
   batch, 
   user,
@@ -12,8 +12,12 @@ export function BatchCard({
   // Props de permisos
   canManageSales,
   canDeleteSales,
-  canDeleteBatches
+  canDeleteBatches,
+  isAdmin,
+  onLogout
 }) {
+  const [isEditingDate, setIsEditingDate] = useState(false);
+  const [newDate, setNewDate] = useState(batch.date.split('T')[0]);
   const totalSold = batch.sales.reduce((sum, sale) => sum + sale.quantitySold, 0);
   const remaining = batch.quantityMade - totalSold;
   
@@ -29,15 +33,53 @@ export function BatchCard({
     }
     return sum;
   }, 0);
-
+   const handleDateChange = async (e) => {
+    e.preventDefault();
+    try {
+      await api.updateBatchDate(batch.id, newDate, onLogout);
+      setIsEditingDate(false);
+      // La actualización se reflejará por el evento de socket, no es necesario recargar aquí.
+    } catch (error) {
+      console.error("Error al actualizar la fecha:", error);
+      alert("No se pudo actualizar la fecha.");
+    }
+  };
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all duration-300">
       {/* Header del lote (sin cambios) */}
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-xl font-bold text-brown-700">{batch.breadType}</h3>
-          <p className="text-sm text-brown-600">Por: {batch.createdBy}</p>
+           {isEditingDate ? (
+            <form onSubmit={handleDateChange} className="flex items-center space-x-2 mt-1">
+              <input 
+                type="date" 
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+                className="input-field !py-1"
+              />
+              <button type="submit" className="btn btn-primary !py-1">OK</button>
+              <button type="button" onClick={() => setIsEditingDate(false)} className="btn btn-secondary !py-1">X</button>
+            </form>
+          ) : (
+          <p className="text-sm text-brown-600">
+              {new Date(batch.date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+          )}
         </div>
+        
+
+        <div className="flex items-center space-x-2">
+          {/* ✅ NUEVO: Botón para iniciar la edición de fecha */}
+          {isAdmin && !isEditingDate && (
+            <button
+              onClick={() => setIsEditingDate(true)}
+              className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Editar fecha del lote"
+            >
+              ✏️
+            </button>
+          )}
         {canDeleteBatches && (
           <button
             onClick={() => onDeleteBatch(batch.id)}
@@ -47,6 +89,7 @@ export function BatchCard({
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
           </button>
         )}
+      </div> 
       </div>
 
       {/* Estadísticas del lote (sin cambios) */}
