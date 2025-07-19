@@ -35,6 +35,7 @@ function App() {
 
   const handleLogin = async (email, password) => {
     const data = await api.login(email, password);
+    // El 'user' que viene del API ahora incluye los permisos. ¡Perfecto!
     localStorage.setItem('jwt_token', data.token);
     localStorage.setItem('user_info', JSON.stringify(data.user));
     setToken(data.token);
@@ -59,7 +60,41 @@ function App() {
     // Solo el administrador puede eliminar ventas
     return user?.role === 'admin' || user?.role === 'administrador';
   }, []);
+const getPermissions = useCallback(() => {
+    // Si no hay usuario, no hay permisos.
+    if (!user) {
+      return {
+        canViewStockCard: false,
+        canManageStock: false,
+        canViewAllSales: false,
+        canDeleteSales: false,
+        canManageSales: false, // Permiso para marcar como pagado
+        canDeleteBatches: false, // Permiso para eliminar lotes
+        isManagerOrAdmin: false,
+        isAdmin: false
+      };
+    }
 
+    const { role, permissions } = user;
+    const p = permissions || {}; // Fallback por si los permisos son null
+
+    // El admin y el manager tienen permisos especiales por defecto
+    const isAdmin = role === 'admin';
+    const isManager = role === 'manager';
+
+    return {
+      canViewStockCard: p.canViewStockCard || isAdmin || isManager,
+      canManageStock: p.canManageStock || isAdmin || isManager,
+      canViewAllSales: p.canViewAllSales || isAdmin || isManager,
+      canDeleteSales: p.canDeleteSales || isAdmin,
+      
+      // Permisos más específicos
+      canManageSales: p.canDeleteSales || isAdmin || isManager, // Quien puede borrar, puede gestionar
+      canDeleteBatches: isAdmin, // Solo el admin puede borrar lotes
+      isManagerOrAdmin: isAdmin || isManager,
+      isAdmin: isAdmin,
+    };
+  }, [user]);
   // Verificar token guardado al montar el componente
   useEffect(() => {
     const savedToken = localStorage.getItem('jwt_token');
@@ -244,6 +279,7 @@ function App() {
           handleUpdateSale={handleUpdateSale}
           handleDeleteSale={handleDeleteSale}
           canDeleteSale={canDeleteSale} // ✅ NUEVO: Pasar función de permisos
+          getPermissions={getPermissions}
         />
       )}
     </>
