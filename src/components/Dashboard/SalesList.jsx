@@ -1,5 +1,6 @@
 // src/components/Dashboard/SalesList.jsx
 import React from 'react';
+
 import { CheckCircleIcon, XCircleIcon, TrashIcon } from '../icons';
 
 const SaleRow = ({ sale, batchId, onUpdateSale, onDeleteSale }) => {

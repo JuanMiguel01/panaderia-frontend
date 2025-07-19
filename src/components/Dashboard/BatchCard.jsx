@@ -1,5 +1,6 @@
 // src/components/Dashboard/BatchCard.jsx
-import React from 'react';
+
+import React, { useState } from 'react';
 import { AddSaleForm } from './AddSaleForm';
 import {api} from '../../services/api';
 export function BatchCard({ 
