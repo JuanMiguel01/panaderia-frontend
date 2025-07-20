@@ -103,122 +103,123 @@ export function Dashboard({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4 sm:p-8">
-      <header className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-amber-900">Panadería Digital</h1>
-        <div>
-          <span className="mr-4 text-gray-700">Hola, {user.email}!</span>
-          <button onClick={onLogout} className="btn btn-secondary">Cerrar Sesión</button>
-        </div>
-      </header>
-
-      {/* Pestañas de Navegación */}
-       <div className="mb-6 border-b-2 border-amber-200">
-        <nav className="-mb-0.5 flex space-x-6">
-          <button onClick={() => setActiveTab('dashboard')} className={`tab-button ${activeTab === 'dashboard' && 'tab-active'}`}>
-            📦 Ventas Diarias
-          </button>
-          <button onClick={() => setActiveTab('stock')} className={`tab-button ${activeTab === 'stock' && 'tab-active'}`}>
-            📊 Tarjeta de Estiba
-          </button>
-          {permissions.isAdmin && (
-            <button onClick={() => setActiveTab('inventory')} className={`tab-button ${activeTab === 'inventory' && 'tab-active'}`}>
-              🌾 Inventario Insumos
-            </button>
-          )}
-          {permissions.isAdmin && (
-            <button onClick={() => setActiveTab('users')} className={`tab-button ${activeTab === 'users' && 'tab-active'}`}>
-              👥 Gestión de Usuarios
-            </button>
-          )}
-        </nav>
-      </div>
-
-      {activeTab === 'dashboard' && (
-        <>
-          {/* Resumen Financiero y Filtros */}
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-white/80 p-6 rounded-xl shadow-md">
-              <h3 className="font-bold text-lg text-red-700">💰 Dinero por Recoger</h3>
-              <p className="text-4xl font-extrabold text-red-600">${moneyToCollect.toFixed(2)}</p>
-              <p className="text-sm text-gray-500 mt-1">Suma de todas las ventas no pagadas y no regaladas.</p>
-            </div>
-            <div className="bg-white/80 p-6 rounded-xl shadow-md">
-              <h3 className="font-bold text-lg text-blue-700">🔍 Filtrar Ventas</h3>
-              <div className="flex space-x-4 mt-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Estado de Pago</label>
-                  <select value={saleFilters.paid} onChange={e => setSaleFilters({...saleFilters, paid: e.target.value})} className="input-field mt-1">
-                    <option value="all">Todos</option>
-                    <option value="paid">Pagado</option>
-                    <option value="not_paid">No Pagado</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Estado de Entrega</label>
-                  <select value={saleFilters.delivered} onChange={e => setSaleFilters({...saleFilters, delivered: e.target.value})} className="input-field mt-1">
-                    <option value="all">Todos</option>
-                    <option value="delivered">Entregado</option>
-                    <option value="not_delivered">No Entregado</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+      {/* ✅ MEJORA: Contenedor para limitar el ancho y centrar el contenido en pantallas grandes */}
+      <div className="max-w-7xl mx-auto">
+        <header className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-amber-900">Panadería Digital</h1>
+          <div>
+            <span className="mr-4 text-gray-700">Hola, {user.email}!</span>
+            <button onClick={onLogout} className="btn btn-secondary">Cerrar Sesión</button>
           </div>
+        </header>
 
-          {permissions.canManageStock && <AddBatchForm onCreateBatch={handleCreateBatch} />}
-
-          <div className="space-y-6">
-            {Object.keys(filteredBatches).length === 0 ? (
-              <div className="text-center py-12 bg-white/50 rounded-lg">
-                <p className="text-gray-600 text-xl">No hay lotes que coincidan con los filtros actuales.</p>
-              </div>
-            ) : (
-              Object.entries(filteredBatches).map(([date, dateBatches]) => (
-                <CollapsibleSection key={date} title={date}>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {dateBatches.map(batch => (
-                      <BatchCard
-                        key={batch.id}
-                        batch={batch}
-                        user={user}
-                        onCreateSale={handleCreateSale}
-                        onUpdateSale={handleUpdateSale}
-                        onDeleteSale={handleDeleteSale}
-                        onDeleteBatch={handleDeleteBatch}
-                        // Pasamos los permisos específicos
-                        canManageSales={permissions.canManageSales}
-                        canDeleteSales={permissions.canDeleteSales}
-                        canDeleteBatches={permissions.canDeleteBatches}
-                      />
-                    ))}
-                  </div>
-                </CollapsibleSection>
-              ))
+        {/* Pestañas de Navegación */}
+        <div className="mb-6 border-b-2 border-amber-200">
+          <nav className="-mb-0.5 flex space-x-6">
+            <button onClick={() => setActiveTab('dashboard')} className={`tab-button ${activeTab === 'dashboard' && 'tab-active'}`}>
+              📦 Ventas Diarias
+            </button>
+            <button onClick={() => setActiveTab('stock')} className={`tab-button ${activeTab === 'stock' && 'tab-active'}`}>
+              📊 Tarjeta de Estiba
+            </button>
+            {permissions.isAdmin && (
+              <button onClick={() => setActiveTab('inventory')} className={`tab-button ${activeTab === 'inventory' && 'tab-active'}`}>
+                🌾 Inventario Insumos
+              </button>
             )}
-          </div>
-        </>
-      )}
- {/* Contenido de la pestaña de Ventas Diarias */}
-      {activeTab === 'dashboard' && (
-        <>
-          {/* ... (Resumen financiero, filtros y lista de lotes sin cambios) ... */}
-        </>
-      )}
+            {permissions.isAdmin && (
+              <button onClick={() => setActiveTab('users')} className={`tab-button ${activeTab === 'users' && 'tab-active'}`}>
+                👥 Gestión de Usuarios
+              </button>
+            )}
+          </nav>
+        </div>
+        
+        {/* Contenido de las pestañas */}
+        <main>
+          {activeTab === 'dashboard' && (
+            <>
+              {/* Resumen Financiero y Filtros */}
+              <div className="grid md:grid-cols-2 gap-6 mb-8">
+                <div className="bg-white/80 p-6 rounded-xl shadow-md">
+                  <h3 className="font-bold text-lg text-red-700">💰 Dinero por Recoger</h3>
+                  <p className="text-4xl font-extrabold text-red-600">${moneyToCollect.toFixed(2)}</p>
+                  <p className="text-sm text-gray-500 mt-1">Suma de todas las ventas no pagadas y no regaladas.</p>
+                </div>
+                <div className="bg-white/80 p-6 rounded-xl shadow-md">
+                  <h3 className="font-bold text-lg text-blue-700">🔍 Filtrar Ventas</h3>
+                  <div className="flex space-x-4 mt-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Estado de Pago</label>
+                      <select value={saleFilters.paid} onChange={e => setSaleFilters({...saleFilters, paid: e.target.value})} className="input-field mt-1">
+                        <option value="all">Todos</option>
+                        <option value="paid">Pagado</option>
+                        <option value="not_paid">No Pagado</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Estado de Entrega</label>
+                      <select value={saleFilters.delivered} onChange={e => setSaleFilters({...saleFilters, delivered: e.target.value})} className="input-field mt-1">
+                        <option value="all">Todos</option>
+                        <option value="delivered">Entregado</option>
+                        <option value="not_delivered">No Entregado</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-      {/* ✅ NUEVO: Contenido de la pestaña de Tarjeta de Estiba */}
-      {activeTab === 'stock' && (
-        <StockCard batches={batches} />
-      )}
+              {permissions.canManageStock && <AddBatchForm onCreateBatch={handleCreateBatch} />}
 
-      {/* ✅ NUEVO: Contenido de la pestaña de Inventario de Insumos */}
-      {activeTab === 'inventory' && permissions.isAdmin && (
-        <InventoryManagement onLogout={onLogout} />
-      )}
+              <div className="space-y-6">
+                {Object.keys(filteredBatches).length === 0 ? (
+                  <div className="text-center py-12 bg-white/50 rounded-lg">
+                    <p className="text-gray-600 text-xl">No hay lotes que coincidan con los filtros actuales.</p>
+                  </div>
+                ) : (
+                  Object.entries(filteredBatches).map(([date, dateBatches]) => (
+                    <CollapsibleSection key={date} title={date}>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {dateBatches.map(batch => (
+                          <BatchCard
+                            key={batch.id}
+                            batch={batch}
+                            user={user}
+                            onCreateSale={handleCreateSale}
+                            onUpdateSale={handleUpdateSale}
+                            onDeleteSale={handleDeleteSale}
+                            onDeleteBatch={handleDeleteBatch}
+                            // Pasamos los permisos específicos
+                            canManageSales={permissions.canManageSales}
+                            canDeleteSales={permissions.canDeleteSales}
+                            canDeleteBatches={permissions.canDeleteBatches}
+                            isAdmin={permissions.isAdmin} 
+                          />
+                        ))}
+                      </div>
+                    </CollapsibleSection>
+                  ))
+                )}
+              </div>
+            </>
+          )}
 
-      {/* Contenido de la pestaña de Gestión de Usuarios */}
-      {activeTab === 'users' && permissions.isAdmin && (
-        <UserManagement onLogout={onLogout} />
-      )}
+          {/* Contenido de la pestaña de Tarjeta de Estiba */}
+          {activeTab === 'stock' && (
+            <StockCard batches={batches} />
+          )}
+
+          {/* Contenido de la pestaña de Inventario de Insumos */}
+          {activeTab === 'inventory' && permissions.isAdmin && (
+            <InventoryManagement onLogout={onLogout} />
+          )}
+
+          {/* Contenido de la pestaña de Gestión de Usuarios */}
+          {activeTab === 'users' && permissions.isAdmin && (
+            <UserManagement onLogout={onLogout} />
+          )}
+        </main>
+      </div>
     </div>
   );
 }

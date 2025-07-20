@@ -7,40 +7,9 @@ const formatDate = (dateString) => new Date(dateString).toLocaleDateString('es-E
 
 export function StockCard({ batches }) {
   const [dateRange, setDateRange] = useState({
-    from: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0], // Por defecto, la última semana
+    from: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0], // Por defecto, el último mes
     to: new Date().toISOString().split('T')[0]
   });
-  const [filter, setFilter] = useState('all');
-
-  // ✅ Nuevo estado para gestionar la edición en la tabla
-  const [editingBatch, setEditingBatch] = useState(null);
-  const [newDate, setNewDate] = useState('');
-
-  const handleEditClick = (batch) => {
-    setEditingBatch(batch.id);
-    setNewDate(new Date(batch.date).toISOString().split('T')[0]);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingBatch(null);
-  };
-
-  const handleSaveDate = async (batchId) => {
-    try {
-      // Asumiendo que tienes una función api.updateBatchDate
-      // Necesitarás implementar `api.updateBatchDate` en tu capa de servicios/API
-      // Por ejemplo: await api.updateBatchDate(batchId, newDate);
-      console.log(`Guardando fecha ${newDate} para el lote ${batchId}`); // Placeholder para la llamada a la API
-      setEditingBatch(null);
-      // La actualización se verá reflejada por el socket o necesitarás refetch
-      // Si usas SWR, React Query, o Redux, la invalidación de caché podría ser automática.
-      // De lo contrario, podrías necesitar recargar los batches:
-      // fetchBatches(); // Una función que obtenga los batches nuevamente
-    } catch (error) {
-      console.error("Error al actualizar la fecha:", error);
-      alert("No se pudo actualizar la fecha.");
-    }
-  };
 
   // Filtrar batches por fecha
   const filteredBatches = batches.filter(batch => {
@@ -54,7 +23,7 @@ export function StockCard({ batches }) {
     const revenue = batch.sales.reduce((sum, sale) => {
         // Esta lógica es de una implementación anterior, pero la verificamos aquí.
         if (sale.isGift) return sum;
-        return sum + (sale.quantitySold * batch.price);
+        return sum + (sale.quantitySold * (batch.price || 0)); // ✅ CORRECCIÓN: Usar (batch.price || 0) para evitar errores si el precio es nulo o indefinido.
     }, 0);
     
     acc.made += batch.quantityMade;
@@ -65,16 +34,6 @@ export function StockCard({ batches }) {
   }, { made: 0, sold: 0, revenue: 0 });
 
   const remainingTotal = totals.made - totals.sold;
-
-  // Filtrar datos para la tabla según el filtro de "todos", "vendidos", o "con inventario"
-  const finalFilteredData = filteredBatches.filter(batch => {
-    const totalSold = batch.sales.reduce((sum, sale) => sum + sale.quantitySold, 0);
-    const remaining = batch.quantityMade - totalSold;
-    
-    if (filter === 'sold') return totalSold > 0;
-    if (filter === 'remaining') return remaining > 0;
-    return true; // para 'all'
-  });
 
   return (
     <div className="space-y-6">
@@ -91,7 +50,7 @@ export function StockCard({ batches }) {
         </div>
       </div>
 
-      {/* ✅ MODIFICADO: Resumen de totales más visual y claro */}
+      {/* Resumen de totales más visual y claro */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-blue-100 p-6 rounded-xl text-center shadow-lg transition-transform hover:scale-105">
             <h3 className="text-lg font-semibold text-blue-800">Total Producido</h3>
@@ -117,15 +76,8 @@ export function StockCard({ batches }) {
 
       {/* Tabla de datos MODIFICADA */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        {finalFilteredData.length === 0 ? (
-          <div className="text-center py-12">
-            <span className="text-6xl">📋</span>
-            <p className="text-gray-600 text-xl mt-4">No hay datos para mostrar</p>
-            <p className="text-gray-500 mt-2">Ajusta los filtros de fecha o crea algunos lotes</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+        <div className="overflow-x-auto"> {/* ✅ MEJORA: Se envuelve la tabla en un div con overflow-x-auto para responsividad */}
+            <table className="w-full min-w-max">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
@@ -136,32 +88,25 @@ export function StockCard({ batches }) {
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Por Vender</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ingresos</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Creado Por</th>
-                  {/* ✅ Nueva columna para Acciones */}
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {finalFilteredData.map(batch => {
+                {filteredBatches.map(batch => {
                   const totalSold = batch.sales.reduce((sum, sale) => sum + sale.quantitySold, 0);
                   const remaining = batch.quantityMade - totalSold;
                   const revenue = batch.sales.reduce((sum, sale) => {
                       if (sale.isGift) return sum;
-                      return sum + (sale.quantitySold * batch.price);
+                      return sum + (sale.quantitySold * (batch.price || 0)); // ✅ CORRECCIÓN: Usar (batch.price || 0) aquí también
                   }, 0);
                   
                   return (
                     <tr key={batch.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {/* Lógica para editar la fecha */}
-                        {editingBatch === batch.id ? (
-                            <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} className="input-field !py-1" />
-                        ) : (
-                            formatDate(batch.date)
-                        )}
+                        {formatDate(batch.date)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{batch.breadType}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{batch.quantityMade}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${batch.price.toFixed(2)}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${(batch.price || 0).toFixed(2)}</td> {/* ✅ CORRECCIÓN: Usar (batch.price || 0) para mostrar el precio */}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
                         <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">{totalSold}</span>
                       </td>
@@ -172,22 +117,17 @@ export function StockCard({ batches }) {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">${revenue.toFixed(2)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{batch.createdBy}</td>
-                      {/* ✅ Celda de Acciones */}
-                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                        {editingBatch === batch.id ? (
-                            <div className="flex space-x-2 justify-center">
-                                <button onClick={() => handleSaveDate(batch.id)} className="text-green-600 hover:text-green-900">Guardar</button>
-                                <button onClick={handleCancelEdit} className="text-gray-600 hover:text-gray-900">Cancelar</button>
-                            </div>
-                        ) : (
-                            <button onClick={() => handleEditClick(batch)} className="text-blue-600 hover:text-blue-900">Editar Fecha</button>
-                        )}
-                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+        </div>
+        {filteredBatches.length === 0 && (
+          <div className="text-center py-12">
+            <span className="text-6xl">📋</span>
+            <p className="text-gray-600 text-xl mt-4">No hay datos para mostrar</p>
+            <p className="text-gray-500 mt-2">Ajusta los filtros de fecha o crea algunos lotes.</p>
           </div>
         )}
       </div>
