@@ -79,16 +79,24 @@ export function Dashboard({
       const dayBatches = batchesByDate[date]
         .map(batch => {
           const filteredSales = batch.sales.filter(sale => {
-            const paidMatch =
-              saleFilters.paid === 'all' ||
-              (saleFilters.paid === 'paid' && sale.isPaid) ||
-              (saleFilters.paid === 'not_paid' && !sale.isPaid);
-            const deliveredMatch =
-              saleFilters.delivered === 'all' ||
-              (saleFilters.delivered === 'delivered' && sale.isDelivered) ||
-              (saleFilters.delivered === 'not_delivered' && !sale.isDelivered);
-            return paidMatch && deliveredMatch;
-          });
+    const paidMatch =
+      saleFilters.paid === 'all' ||
+      (saleFilters.paid === 'paid' && sale.isPaid) ||
+      (saleFilters.paid === 'not_paid' && !sale.isPaid);
+
+    const deliveredMatch =
+      saleFilters.delivered === 'all' ||
+      (saleFilters.delivered === 'delivered' && sale.isDelivered) ||
+      (saleFilters.delivered === 'not_delivered' && !sale.isDelivered);
+
+    // ✅ NUEVA LÓGICA:
+    // Esta condición asegura que si el filtro es 'not_paid',
+    // la venta no puede ser un regalo (sale.isGift debe ser falso).
+    // En cualquier otro caso ('all' o 'paid'), esta condición no afecta.
+    const giftMatch = saleFilters.paid !== 'not_paid' || !sale.isGift;
+
+    return paidMatch && deliveredMatch && giftMatch;
+});
           // Solo devolvemos el lote si tiene ventas que coinciden con el filtro
           return { ...batch, sales: filteredSales };
         })
