@@ -17,9 +17,9 @@ export function StockCard({ batches }) {
   const totals = filteredBatches.reduce((acc, batch) => {
     const totalSold = batch.sales.reduce((sum, sale) => sum + sale.quantitySold, 0);
     const revenue = batch.sales.reduce((sum, sale) => {
-        if (sale.isGift) return sum;
-        return sum + (sale.quantitySold * (Number(batch.price) || 0));
-    }, 0);
+    if (sale.isGift) return sum;
+    return sum + (sale.quantitySold * (Number(batch.price) || 0));
+}, 0);
     
     acc.made += batch.quantityMade;
     acc.sold += totalSold;
@@ -101,7 +101,7 @@ export function StockCard({ batches }) {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{batch.breadType}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{batch.quantityMade}</td>
                     {/* ✅ CORRECCIÓN: Usar (batch.price || 0) para mostrar el precio */}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${(batch.price || 0).toFixed(2)}</td>
+                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${(Number(batch.price) || 0).toFixed(2)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
                       <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">{totalSold}</span>
                     </td>
