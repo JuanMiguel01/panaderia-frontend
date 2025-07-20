@@ -18,7 +18,7 @@ export function StockCard({ batches }) {
     const totalSold = batch.sales.reduce((sum, sale) => sum + sale.quantitySold, 0);
     const revenue = batch.sales.reduce((sum, sale) => {
         if (sale.isGift) return sum;
-        return sum + (sale.quantitySold * (batch.price || 0));
+        return sum + (sale.quantitySold * (Number(batch.price) || 0));
     }, 0);
     
     acc.made += batch.quantityMade;

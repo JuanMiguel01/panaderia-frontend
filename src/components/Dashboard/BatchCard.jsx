@@ -22,21 +22,23 @@ export function BatchCard({
   // Aseguramos que la fecha inicial esté en formato YYYY-MM-DD
   const [newDate, setNewDate] = useState(batch.date ? new Date(batch.date).toISOString().split('T')[0] : '');
 
-  const totalSold = batch.sales.reduce((sum, sale) => sum + sale.quantitySold, 0);
-  const remaining = batch.quantityMade - totalSold;
-  
+// ✅ CORRECCIÓN: Usar (Number(batch.price) || 0) para asegurar que el precio es un número.
   const totalRevenue = batch.sales.reduce((sum, sale) => {
     if (sale.isGift) return sum;
-    // Usamos (batch.price || 0) para evitar errores si el precio es nulo
-    return sum + (sale.quantitySold * (batch.price || 0));
+    return sum + (sale.quantitySold * (Number(batch.price) || 0));
   }, 0);
 
+  // ✅ CORRECCIÓN: Aplicar también aquí.
   const batchPendingAmount = batch.sales.reduce((sum, sale) => {
     if (!sale.isPaid && !sale.isGift) {
-      return sum + (sale.quantitySold * (batch.price || 0));
+      return sum + (sale.quantitySold * (Number(batch.price) || 0));
     }
     return sum;
   }, 0);
+
+  const totalSold = batch.sales.reduce((sum, sale) => sum + sale.quantitySold, 0);
+  const remaining = batch.quantityMade - totalSold;
+
 
    // ✅ Lógica para manejar el cambio de fecha
    const handleDateChange = async (e) => {
@@ -50,13 +52,12 @@ export function BatchCard({
       alert("No se pudo actualizar la fecha.");
     }
   };
-
-  return (
+return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all duration-300">
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-xl font-bold text-brown-700">{batch.breadType}</h3>
-           {isEditingDate ? (
+            {isEditingDate ? (
             <form onSubmit={handleDateChange} className="flex items-center space-x-2 mt-1">
               <input 
                 type="date" 
@@ -127,7 +128,8 @@ export function BatchCard({
         ) : (
           batch.sales.map(sale => {
             const isUnpaid = !sale.isPaid && !sale.isGift;
-            const saleAmount = sale.quantitySold * batch.price;
+            // ✅ CORRECCIÓN APLICADA AQUÍ: Asegurarse de que batch.price sea un número
+            const saleAmount = sale.quantitySold * (Number(batch.price) || 0);
 
             return (
               // ✅ MODIFICADO: Añadimos clase condicional para resaltar
@@ -141,7 +143,8 @@ export function BatchCard({
                   </div>
                   <p className="text-sm text-gray-600">
                     {sale.quantitySold} unidades
-                    {!sale.isGift && ` × $${batch.price} = $${saleAmount.toFixed(2)}`}
+                    {/* Aquí .toFixed() es seguro porque saleAmount ya es un número */}
+                    {!sale.isGift && ` × $${(Number(batch.price) || 0).toFixed(2)} = $${saleAmount.toFixed(2)}`}
                   </p>
                   {/* ✅ NUEVO: Mostrar lo que falta por cobrar en la venta */}
                   {isUnpaid && (
