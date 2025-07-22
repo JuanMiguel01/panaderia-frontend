@@ -4,12 +4,12 @@ import React, { useState } from 'react';
 import { AddSaleForm } from './AddSaleForm';
 import { api } from '../../services/api';
 
-export function BatchCard({ 
-  batch, 
+export function BatchCard({
+  batch,
   user,
-  onCreateSale, 
-  onUpdateSale, 
-  onDeleteSale, 
+  onCreateSale,
+  onUpdateSale,
+  onDeleteSale,
   onDeleteBatch,
   // Props de permisos
   canManageSales,
@@ -22,7 +22,7 @@ export function BatchCard({
   // Aseguramos que la fecha inicial esté en formato YYYY-MM-DD
   const [newDate, setNewDate] = useState(batch.date ? new Date(batch.date).toISOString().split('T')[0] : '');
 
-// ✅ CORRECCIÓN: Usar (Number(batch.price) || 0) para asegurar que el precio es un número.
+  // ✅ CORRECCIÓN: Usar (Number(batch.price) || 0) para asegurar que el precio es un número.
   const totalRevenue = batch.sales.reduce((sum, sale) => {
     if (sale.isGift) return sum;
     return sum + (sale.quantitySold * (Number(batch.price) || 0));
@@ -52,15 +52,16 @@ export function BatchCard({
       alert("No se pudo actualizar la fecha.");
     }
   };
-return (
+  
+  return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all duration-300">
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-xl font-bold text-brown-700">{batch.breadType}</h3>
             {isEditingDate ? (
             <form onSubmit={handleDateChange} className="flex items-center space-x-2 mt-1">
-              <input 
-                type="date" 
+              <input
+                type="date"
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
                 className="input-field !py-1"
@@ -86,7 +87,7 @@ return (
             </div>
           )}
         </div>
-        
+
         <div className="flex items-center space-x-2">
             {canDeleteBatches && (
                 <button
@@ -97,12 +98,23 @@ return (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
             )}
-        </div> 
+        </div>
       </div>
 
-      {/* Estadísticas del lote (sin cambios) */}
-      <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-brown-50 rounded-lg">
-        {/* ... */}
+      {/* ⭐ CÓDIGO RESTAURADO: Estadísticas del lote */}
+      <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-brown-50 rounded-lg text-center">
+        <div>
+          <p className="text-sm font-medium text-gray-600">Producido</p>
+          <p className="text-2xl font-bold text-brown-800">{batch.quantityMade}</p>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-gray-600">Vendido</p>
+          <p className="text-2xl font-bold text-green-700">{totalSold}</p>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-gray-600">Falta</p>
+          <p className="text-2xl font-bold text-orange-600">{remaining}</p>
+        </div>
       </div>
 
       {/* ✅ MODIFICADO: Resumen de ingresos y pendientes */}
@@ -122,7 +134,7 @@ return (
         <h4 className="font-semibold text-brown-700 border-b pb-2">
           Ventas ({batch.sales.length})
         </h4>
-        
+
         {batch.sales.length === 0 ? (
           <p className="text-gray-500 text-sm italic py-2">No hay ventas registradas</p>
         ) : (
@@ -153,7 +165,7 @@ return (
                     </p>
                   )}
                 </div>
-                
+
                 {/* Checkboxes y botones (sin cambios en su lógica) */}
                 <div className="flex items-center space-x-4">
                   <label className={`flex items-center space-x-2 ${canManageSales ? 'cursor-pointer' : 'cursor-default'}`}>
@@ -175,11 +187,11 @@ return (
           })
         )}
       </div>
-      
+
       {/* Formulario para añadir nueva venta (sin cambios) */}
       <div className="border-t pt-4">
         <h5 className="text-sm font-medium text-brown-700 mb-3">Añadir nueva venta</h5>
-        <AddSaleForm 
+        <AddSaleForm
           batchId={batch.id}
           remaining={remaining}
           onCreateSale={onCreateSale}
