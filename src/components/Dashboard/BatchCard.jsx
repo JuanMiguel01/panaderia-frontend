@@ -1,202 +1,261 @@
 // src/components/Dashboard/BatchCard.jsx
-
 import React, { useState } from 'react';
 import { AddSaleForm } from './AddSaleForm';
 import { api } from '../../services/api';
+import { useConfirm } from '../ConfirmModal';
+import { useToast } from '../Toast';
 
 export function BatchCard({
-  batch,
-  user,
-  onCreateSale,
-  onUpdateSale,
-  onDeleteSale,
-  onDeleteBatch,
-  // Props de permisos
-  canManageSales,
-  canDeleteSales,
-  canDeleteBatches,
-  isAdmin, // Recibimos si es admin directamente
-  onLogout
+  batch, user, onCreateSale, onUpdateSale, onDeleteSale,
+  onDeleteBatch, canManageSales, canDeleteSales, canDeleteBatches, isAdmin, onLogout
 }) {
   const [isEditingDate, setIsEditingDate] = useState(false);
-  // Aseguramos que la fecha inicial esté en formato YYYY-MM-DD
-  const [newDate, setNewDate] = useState(batch.date ? new Date(batch.date).toISOString().split('T')[0] : '');
+  const [newDate, setNewDate] = useState(
+    batch.date ? new Date(batch.date).toISOString().split('T')[0] : ''
+  );
+  const [showSales, setShowSales] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const { confirm, ConfirmDialog } = useConfirm();
+  const toast = useToast();
 
-  // ✅ CORRECCIÓN: Usar (Number(batch.price) || 0) para asegurar que el precio es un número.
-  const totalRevenue = batch.sales.reduce((sum, sale) => {
-    if (sale.isGift) return sum;
-    return sum + (sale.quantitySold * (Number(batch.price) || 0));
-  }, 0);
-
-  // ✅ CORRECCIÓN: Aplicar también aquí.
-  const batchPendingAmount = batch.sales.reduce((sum, sale) => {
-    if (!sale.isPaid && !sale.isGift) {
-      return sum + (sale.quantitySold * (Number(batch.price) || 0));
-    }
-    return sum;
-  }, 0);
-
-  const totalSold = batch.sales.reduce((sum, sale) => sum + sale.quantitySold, 0);
+  const price = Number(batch.price) || 0;
+  const totalSold = batch.sales.reduce((s, sale) => s + sale.quantitySold, 0);
   const remaining = batch.quantityMade - totalSold;
+  const totalRevenue = batch.sales.reduce((s, sale) => sale.isGift ? s : s + sale.quantitySold * price, 0);
+  const pendingAmount = batch.sales.reduce((s, sale) => (!sale.isPaid && !sale.isGift) ? s + sale.quantitySold * price : s, 0);
+  const giftCount = batch.sales.filter(s => s.isGift).length;
+  const soldPct = batch.quantityMade > 0 ? Math.round((totalSold / batch.quantityMade) * 100) : 0;
 
+  const handleDeleteBatch = async () => {
+    const ok = await confirm({
+      title: 'Eliminar lote',
+      message: `¿Seguro que deseas eliminar el lote de "${batch.breadType}"? Esto eliminará también todas sus ventas.`,
+      confirmText: 'Sí, eliminar',
+      icon: '🗑️',
+    });
+    if (ok) onDeleteBatch(batch.id);
+  };
 
-   // ✅ Lógica para manejar el cambio de fecha
-   const handleDateChange = async (e) => {
+  const handleDeleteSale = async (batchId, saleId, personName) => {
+    const ok = await confirm({
+      title: 'Eliminar venta',
+      message: `¿Eliminar la venta de ${personName}?`,
+      confirmText: 'Eliminar',
+      icon: '🗑️',
+    });
+    if (ok) onDeleteSale(batchId, saleId);
+  };
+
+  const handleDateChange = async (e) => {
     e.preventDefault();
     try {
       await api.updateBatchDate(batch.id, newDate, onLogout);
       setIsEditingDate(false);
-      // La actualización se reflejará por el evento de socket, no es necesario recargar aquí.
-    } catch (error) {
-      console.error("Error al actualizar la fecha:", error);
-      alert("No se pudo actualizar la fecha.");
+      toast.success('Fecha actualizada');
+    } catch {
+      toast.error('No se pudo actualizar la fecha');
     }
   };
-  
+
   return (
-    <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all duration-300">
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <h3 className="text-xl font-bold text-brown-700">{batch.breadType}</h3>
-            {isEditingDate ? (
-            <form onSubmit={handleDateChange} className="flex items-center space-x-2 mt-1">
-              <input
-                type="date"
-                value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
-                className="input-field !py-1"
-              />
-              <button type="submit" className="btn btn-primary !py-1">OK</button>
-              <button type="button" onClick={() => setIsEditingDate(false)} className="btn btn-secondary !py-1">X</button>
-            </form>
-          ) : (
-            <div className="flex items-center space-x-2">
-                <p className="text-sm text-brown-600">
-                    {new Date(batch.date).toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
-                {/* ✅ Botón para iniciar la edición de fecha, solo para admins */}
-                {isAdmin && (
-                    <button
-                    onClick={() => setIsEditingDate(true)}
-                    className="p-1 text-blue-500 hover:bg-blue-100 rounded-full transition-colors"
-                    title="Editar fecha del lote"
-                    >
-                    ✏️
+    <>
+      {ConfirmDialog}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
+        {/* Card header */}
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-4 border-b border-amber-100">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-amber-900 text-lg truncate">{batch.breadType}</h3>
+              {isEditingDate ? (
+                <form onSubmit={handleDateChange} className="flex items-center gap-2 mt-1.5">
+                  <input
+                    type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
+                    className="text-sm border border-amber-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  <button type="submit" className="text-xs bg-amber-500 text-white px-2 py-1 rounded-lg hover:bg-amber-600">✓</button>
+                  <button type="button" onClick={() => setIsEditingDate(false)} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-200">✕</button>
+                </form>
+              ) : (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs text-amber-700/70">
+                    {new Date(batch.date).toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' })}
+                  </span>
+                  {isAdmin && (
+                    <button onClick={() => setIsEditingDate(true)} className="text-amber-500 hover:text-amber-700 transition-colors" title="Editar fecha">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                      </svg>
                     </button>
-                )}
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full">
+                ${price.toFixed(2)}/u
+              </span>
+              {canDeleteBatches && (
+                <button onClick={handleDeleteBatch} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar lote">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-3">
+            <div className="flex justify-between text-xs text-amber-700/60 mb-1">
+              <span>{totalSold} vendidos de {batch.quantityMade}</span>
+              <span className="font-semibold text-amber-700">{soldPct}%</span>
+            </div>
+            <div className="h-2 bg-amber-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-500"
+                style={{ width: `${soldPct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div className="px-5 py-3 grid grid-cols-3 gap-3 border-b border-gray-50">
+          <div className="text-center">
+            <p className="text-lg font-extrabold text-gray-800">{remaining}</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Disponibles</p>
+          </div>
+          <div className="text-center border-x border-gray-100">
+            <p className="text-lg font-extrabold text-emerald-600">${totalRevenue.toFixed(0)}</p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Ingresos</p>
+          </div>
+          <div className="text-center">
+            <p className={`text-lg font-extrabold ${pendingAmount > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+              ${pendingAmount.toFixed(0)}
+            </p>
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">Pendiente</p>
+          </div>
+        </div>
+
+        {/* Sales list */}
+        <div className="px-5 py-3">
+          <button
+            onClick={() => setShowSales(s => !s)}
+            className="w-full flex items-center justify-between text-sm font-semibold text-gray-700 hover:text-gray-900 mb-2"
+          >
+            <span className="flex items-center gap-2">
+              Ventas
+              <span className="bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded-full font-normal">
+                {batch.sales.length}
+              </span>
+              {giftCount > 0 && (
+                <span className="bg-purple-100 text-purple-600 text-xs px-1.5 py-0.5 rounded-full font-normal">
+                  {giftCount} 🎁
+                </span>
+              )}
+            </span>
+            <svg className={`w-4 h-4 transition-transform ${showSales ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+
+          {showSales && (
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+              {batch.sales.length === 0 ? (
+                <p className="text-center text-gray-400 text-sm py-4 italic">Sin ventas aún</p>
+              ) : (
+                batch.sales.map(sale => {
+                  const saleAmount = sale.quantitySold * price;
+                  const isUnpaid = !sale.isPaid && !sale.isGift;
+                  return (
+                    <div
+                      key={sale.id}
+                      className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors ${
+                        isUnpaid ? 'bg-red-50 border border-red-100' : 'bg-gray-50 hover:bg-gray-100'
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {sale.personName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-sm text-gray-800 truncate">{sale.personName}</span>
+                          {sale.isGift && <span className="text-xs bg-purple-100 text-purple-600 px-1.5 rounded-full flex-shrink-0">🎁 Regalo</span>}
+                          {isUnpaid && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 rounded-full flex-shrink-0 font-semibold">DEBE</span>}
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          {sale.quantitySold} u{!sale.isGift && ` · $${saleAmount.toFixed(2)}`}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Paid toggle */}
+                        <button
+                          onClick={() => canManageSales ? onUpdateSale(batch.id, sale.id, { isPaid: !sale.isPaid }) : null}
+                          disabled={!canManageSales || sale.isGift}
+                          title="Cambiar estado de pago"
+                          className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                            sale.isPaid || sale.isGift
+                              ? 'bg-emerald-500 text-white'
+                              : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
+                          } ${!canManageSales || sale.isGift ? 'opacity-50 cursor-default' : 'cursor-pointer hover:scale-110'}`}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                          </svg>
+                        </button>
+                        {/* Delivered toggle */}
+                        <button
+                          onClick={() => onUpdateSale(batch.id, sale.id, { isDelivered: !sale.isDelivered })}
+                          title="Cambiar estado de entrega"
+                          className={`w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer hover:scale-110 ${
+                            sale.isDelivered ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
+                          }`}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                          </svg>
+                        </button>
+                        {/* Delete */}
+                        {canDeleteSales && (
+                          <button
+                            onClick={() => handleDeleteSale(batch.id, sale.id, sale.personName)}
+                            className="w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all hover:scale-110"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
         </div>
 
-        <div className="flex items-center space-x-2">
-            {canDeleteBatches && (
-                <button
-                    onClick={() => onDeleteBatch(batch.id)}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Eliminar lote"
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>
-            )}
+        {/* Add sale section */}
+        <div className="px-5 pb-4 border-t border-gray-50 pt-3">
+          <button
+            onClick={() => setShowAddForm(s => !s)}
+            disabled={remaining === 0}
+            className={`flex items-center gap-2 text-sm font-medium transition-colors mb-2 ${
+              remaining === 0
+                ? 'text-gray-300 cursor-default'
+                : 'text-amber-600 hover:text-amber-800'
+            }`}
+          >
+            <svg className={`w-4 h-4 transition-transform ${showAddForm ? 'rotate-45' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+            </svg>
+            {remaining === 0 ? 'Lote agotado' : 'Añadir venta'}
+          </button>
+          {showAddForm && remaining > 0 && (
+            <AddSaleForm batchId={batch.id} remaining={remaining} onCreateSale={onCreateSale} />
+          )}
         </div>
       </div>
-
-      {/* ⭐ CÓDIGO RESTAURADO: Estadísticas del lote */}
-      <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-brown-50 rounded-lg text-center">
-        <div>
-          <p className="text-sm font-medium text-gray-600">Producido</p>
-          <p className="text-2xl font-bold text-brown-800">{batch.quantityMade}</p>
-        </div>
-        <div>
-          <p className="text-sm font-medium text-gray-600">Vendido</p>
-          <p className="text-2xl font-bold text-green-700">{totalSold}</p>
-        </div>
-        <div>
-          <p className="text-sm font-medium text-gray-600">Falta</p>
-          <p className="text-2xl font-bold text-orange-600">{remaining}</p>
-        </div>
-      </div>
-
-      {/* ✅ MODIFICADO: Resumen de ingresos y pendientes */}
-      <div className="mb-4 p-3 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg space-y-1">
-        <p className="text-sm text-gray-600">Total vendido: {totalSold} unidades</p>
-        <p className="text-lg font-bold text-green-700">Ingresos: ${totalRevenue.toFixed(2)}</p>
-        {/* ✅ NUEVO: Mostrar el pendiente de cobro por lote */}
-        {batchPendingAmount > 0 && (
-          <p className="text-sm font-bold text-red-600">
-            Pendiente en este lote: ${batchPendingAmount.toFixed(2)}
-          </p>
-        )}
-      </div>
-
-      {/* ✅ MODIFICADO: Lista de ventas con resaltado y detalle de cobro */}
-      <div className="space-y-2 mb-4">
-        <h4 className="font-semibold text-brown-700 border-b pb-2">
-          Ventas ({batch.sales.length})
-        </h4>
-
-        {batch.sales.length === 0 ? (
-          <p className="text-gray-500 text-sm italic py-2">No hay ventas registradas</p>
-        ) : (
-          batch.sales.map(sale => {
-            const isUnpaid = !sale.isPaid && !sale.isGift;
-            // ✅ CORRECCIÓN APLICADA AQUÍ: Asegurarse de que batch.price sea un número
-            const saleAmount = sale.quantitySold * (Number(batch.price) || 0);
-
-            return (
-              // ✅ MODIFICADO: Añadimos clase condicional para resaltar
-              <div key={sale.id} className={`flex items-center justify-between p-3 rounded-lg transition-colors ${isUnpaid ? 'bg-red-50 border border-red-200' : 'bg-gray-50 hover:bg-gray-100'}`}>
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2">
-                      <p className="font-medium text-gray-800">{sale.personName}</p>
-                      {sale.isGift && (
-                          <span className="px-2 py-0.5 text-xs font-semibold text-purple-800 bg-purple-100 rounded-full">Regalo 🎁</span>
-                      )}
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    {sale.quantitySold} unidades
-                    {/* Aquí .toFixed() es seguro porque saleAmount ya es un número */}
-                    {!sale.isGift && ` × $${(Number(batch.price) || 0).toFixed(2)} = $${saleAmount.toFixed(2)}`}
-                  </p>
-                  {/* ✅ NUEVO: Mostrar lo que falta por cobrar en la venta */}
-                  {isUnpaid && (
-                    <p className="text-xs font-semibold text-red-700 pt-1">
-                      Falta por cobrar: ${saleAmount.toFixed(2)}
-                    </p>
-                  )}
-                </div>
-
-                {/* Checkboxes y botones (sin cambios en su lógica) */}
-                <div className="flex items-center space-x-4">
-                  <label className={`flex items-center space-x-2 ${canManageSales ? 'cursor-pointer' : 'cursor-default'}`}>
-                    <input type="checkbox" checked={sale.isPaid} onChange={canManageSales ? (e) => onUpdateSale(batch.id, sale.id, { isPaid: e.target.checked }) : undefined} readOnly={!canManageSales} className={`w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500 ${!canManageSales ? 'pointer-events-none' : ''}`}/>
-                    <span className={`text-sm ${canManageSales ? 'text-gray-700' : 'text-gray-600'}`}>💰 Pagado</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input type="checkbox" checked={sale.isDelivered} onChange={(e) => onUpdateSale(batch.id, sale.id, { isDelivered: e.target.checked })} className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"/>
-                    <span className="text-sm text-gray-700">📦 Entregado</span>
-                  </label>
-                  {canDeleteSales && (
-                    <button onClick={() => onDeleteSale(batch.id, sale.id)} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors" title="Eliminar venta">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Formulario para añadir nueva venta (sin cambios) */}
-      <div className="border-t pt-4">
-        <h5 className="text-sm font-medium text-brown-700 mb-3">Añadir nueva venta</h5>
-        <AddSaleForm
-          batchId={batch.id}
-          remaining={remaining}
-          onCreateSale={onCreateSale}
-        />
-      </div>
-    </div>
+    </>
   );
 }

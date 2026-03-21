@@ -1,70 +1,89 @@
 // src/components/Dashboard/AddSaleForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 export function AddSaleForm({ batchId, remaining, onCreateSale }) {
   const [personName, setPersonName] = useState('');
   const [quantity, setQuantity] = useState('1');
-  const [isGift, setIsGift] = useState(false); // Nuevo estado para el regalo
+  const [isGift, setIsGift] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const inputRef = useRef();
 
-  const handleSubmit = (e) => {
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!personName || !quantity || Number(quantity) > remaining) return;
-    
-    onCreateSale(batchId, { 
-      personName, 
-      quantitySold: Number(quantity),
-      isGift: isGift // Pasamos el nuevo estado
-    });
-
-    setPersonName('');
-    setQuantity('1');
-    setIsGift(false); // Reseteamos el estado
+    if (!personName || !quantity || Number(quantity) < 1 || Number(quantity) > remaining) return;
+    setIsSubmitting(true);
+    try {
+      await onCreateSale(batchId, { personName, quantitySold: Number(quantity), isGift });
+      setPersonName('');
+      setQuantity('1');
+      setIsGift(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center">
-        <input 
-          type="text" 
-          placeholder="Nombre cliente" 
-          value={personName} 
-          onChange={e => setPersonName(e.target.value)} 
-          required 
-          className="input-field sm:col-span-2" 
-          disabled={remaining === 0}
-        />
-        <input 
-          type="number" 
-          placeholder="Cant." 
-          value={quantity} 
-          onChange={e => setQuantity(e.target.value)} 
-          min="1" 
-          max={remaining} 
-          required 
-          className="input-field" 
-          disabled={remaining === 0}
-        />
-        <button 
-          type="submit" 
-          className="btn btn-secondary !py-2 w-full sm:col-span-1" 
-          disabled={remaining === 0}
-        >
-          Añadir Venta
-        </button>
-      </div>
-      {/* Nuevo Checkbox para Regalo */}
-      <div className="flex items-center">
+    <form onSubmit={handleSubmit} className="space-y-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <input
-          type="checkbox"
-          id={`gift-checkbox-${batchId}`}
-          checked={isGift}
-          onChange={(e) => setIsGift(e.target.checked)}
-          disabled={remaining === 0}
-          className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+          ref={inputRef}
+          type="text"
+          placeholder="Nombre del cliente"
+          value={personName}
+          onChange={e => setPersonName(e.target.value)}
+          required
+          className="sm:col-span-2 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
         />
-        <label htmlFor={`gift-checkbox-${batchId}`} className="ml-2 block text-sm text-gray-700">
-          Marcar como regalo (no genera ingresos)
+        <div className="relative">
+          <input
+            type="number"
+            placeholder="Cant."
+            value={quantity}
+            onChange={e => setQuantity(e.target.value)}
+            min="1"
+            max={remaining}
+            required
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">
+            máx {remaining}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 cursor-pointer group">
+          <div className="relative">
+            <input
+              type="checkbox"
+              checked={isGift}
+              onChange={e => setIsGift(e.target.checked)}
+              className="sr-only"
+            />
+            <div className={`w-9 h-5 rounded-full transition-colors ${isGift ? 'bg-purple-500' : 'bg-gray-200'}`}>
+              <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform m-0.5 ${isGift ? 'translate-x-4' : 'translate-x-0'}`}/>
+            </div>
+          </div>
+          <span className="text-xs text-gray-600 group-hover:text-gray-800">🎁 Es un regalo (sin cobro)</span>
         </label>
+        <button
+          type="submit"
+          disabled={isSubmitting || !personName}
+          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-1.5"
+        >
+          {isSubmitting ? (
+            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+            </svg>
+          )}
+          Registrar
+        </button>
       </div>
     </form>
   );

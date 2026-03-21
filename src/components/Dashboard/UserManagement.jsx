@@ -1,564 +1,315 @@
 // src/components/Dashboard/UserManagement.jsx
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { useToast } from '../Toast';
+import { useConfirm } from '../ConfirmModal';
 
-export function UserManagement({ onLogout }) {
-  const [users, setUsers] = useState([]);
-  const [pendingUsers, setPendingUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [showAddUserForm, setShowAddUserForm] = useState(false);
-  const [newUser, setNewUser] = useState({
-    email: '',
-    password: '',
-    role: 'employee',
-    permissions: {
-      canViewStockCard: false,
-      canManageStock: false,
-      canViewAllSales: false,
-      canDeleteSales: false
-    }
-  });
+const ROLES = [
+  { value: 'admin',    label: 'Administrador', color: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' },
+  { value: 'manager',  label: 'Gerente',        color: 'bg-blue-100 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
+  { value: 'employee', label: 'Empleado',        color: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+];
 
-  // Roles disponibles
-  const roles = [
-    { value: 'admin', label: 'Administrador', color: 'bg-red-100 text-red-800' },
-    { value: 'manager', label: 'Gerente', color: 'bg-blue-100 text-blue-800' },
-    { value: 'employee', label: 'Empleado', color: 'bg-green-100 text-green-800' }
-  ];
+const PERMISSION_LABELS = {
+  canViewStockCard: { icon: '📋', label: 'Ver estadísticas' },
+  canManageStock:   { icon: '📦', label: 'Gestionar stock' },
+  canViewAllSales:  { icon: '💰', label: 'Ver todas las ventas' },
+  canDeleteSales:   { icon: '🗑️', label: 'Eliminar ventas' },
+};
 
-  // Cargar usuarios
-  useEffect(() => {
-    loadUsers();
-    loadPendingUsers();
-  }, []);
-
-  const loadUsers = async () => {
-    try {
-      const data = await api.getActiveUsers(onLogout);
-      setUsers(data);
-      setError(null);
-    } catch (error) {
-      console.error('Error loading users:', error);
-      setError('Error al cargar usuarios');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadPendingUsers = async () => {
-    try {
-      const data = await api.getPendingUsers(onLogout);
-      setPendingUsers(data);
-    } catch (error) {
-      console.error('Error loading pending users:', error);
-      setError('Error al cargar usuarios pendientes');
-    }
-  };
-
-  // Aprobar usuario pendiente
-  const approveUser = async (userId) => {
-    try {
-      await api.approveUser(userId, onLogout);
-      await loadUsers();
-      await loadPendingUsers();
-      setError(null);
-    } catch (error) {
-      console.error('Error approving user:', error);
-      setError('Error al aprobar usuario');
-    }
-  };
-
-  // Rechazar usuario pendiente
-  const rejectUser = async (userId) => {
-    try {
-      await api.deleteUser(userId, onLogout);
-      await loadPendingUsers();
-      setError(null);
-    } catch (error) {
-      console.error('Error rejecting user:', error);
-      setError('Error al rechazar usuario');
-    }
-  };
-
-  // Eliminar usuario
-  const deleteUser = async (userId) => {
-    if (!window.confirm('¿Estás seguro de que quieres eliminar este usuario?')) return;
-    
-    try {
-      await api.deleteUser(userId, onLogout);
-      await loadUsers();
-      setError(null);
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      setError('Error al eliminar usuario');
-    }
-  };
-
-  // Actualizar rol y permisos
-  const updateUser = async (userId, updates) => {
-    try {
-      await api.updateUser(userId, updates, onLogout);
-      await loadUsers();
-      setError(null);
-    } catch (error) {
-      console.error('Error updating user:', error);
-      setError('Error al actualizar usuario');
-    }
-  };
-
-  // Crear nuevo usuario
-  const createUser = async (e) => {
-    e.preventDefault();
-    try {
-      await api.createUser(newUser, onLogout);
-      
-      setNewUser({
-        email: '',
-        password: '',
-        role: 'employee',
-        permissions: {
-          canViewStockCard: false,
-          canManageStock: false,
-          canViewAllSales: false,
-          canDeleteSales: false
-        }
-      });
-      setShowAddUserForm(false);
-      await loadUsers();
-      setError(null);
-    } catch (error) {
-      console.error('Error creating user:', error);
-      setError('Error al crear usuario');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
+function RoleBadge({ role }) {
+  const r = ROLES.find(x => x.value === role) || ROLES[2];
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-800">👥 Gestión de Usuarios</h1>
-          <button
-            onClick={() => setShowAddUserForm(!showAddUserForm)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-          >
-            <span>{showAddUserForm ? '❌' : '➕'}</span>
-            <span>{showAddUserForm ? 'Cancelar' : 'Agregar Usuario'}</span>
-          </button>
-        </div>
-      </div>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${r.color}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${r.dot}`}/>
+      {r.label}
+    </span>
+  );
+}
 
-      {/* Mostrar errores */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
-          <div className="flex items-center">
-            <svg className="h-5 w-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {error}
-          </div>
-        </div>
-      )}
-
-      {/* Formulario para agregar usuario */}
-      {showAddUserForm && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
-            <span>➕</span>
-            <span>Agregar Nuevo Usuario</span>
-          </h2>
-          <form onSubmit={createUser} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contraseña
-                </label>
-                <input
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Rol
-              </label>
-              <select
-                value={newUser.role}
-                onChange={(e) => setNewUser({...newUser, role: e.target.value})}
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                {roles.map(role => (
-                  <option key={role.value} value={role.value}>
-                    {role.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Permisos especiales
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={newUser.permissions.canViewStockCard}
-                    onChange={(e) => setNewUser({
-                      ...newUser,
-                      permissions: {...newUser.permissions, canViewStockCard: e.target.checked}
-                    })}
-                    className="rounded"
-                  />
-                  <span className="text-sm">📋 Ver tarjeta de estiba</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={newUser.permissions.canManageStock}
-                    onChange={(e) => setNewUser({
-                      ...newUser,
-                      permissions: {...newUser.permissions, canManageStock: e.target.checked}
-                    })}
-                    className="rounded"
-                  />
-                  <span className="text-sm">📦 Gestionar inventario</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={newUser.permissions.canViewAllSales}
-                    onChange={(e) => setNewUser({
-                      ...newUser,
-                      permissions: {...newUser.permissions, canViewAllSales: e.target.checked}
-                    })}
-                    className="rounded"
-                  />
-                  <span className="text-sm">💰 Ver todas las ventas</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={newUser.permissions.canDeleteSales}
-                    onChange={(e) => setNewUser({
-                      ...newUser,
-                      permissions: {...newUser.permissions, canDeleteSales: e.target.checked}
-                    })}
-                    className="rounded"
-                  />
-                  <span className="text-sm">🗑️ Eliminar ventas</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex space-x-4">
-              <button
-                type="submit"
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
-              >
-                <span>✅</span>
-                <span>Crear Usuario</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddUserForm(false)}
-                className="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500 transition-colors flex items-center space-x-2"
-              >
-                <span>❌</span>
-                <span>Cancelar</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Usuarios pendientes */}
-      {pendingUsers.length > 0 && (
-        <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg p-6 border border-orange-200">
-          <h2 className="text-xl font-semibold text-orange-800 mb-4 flex items-center space-x-2">
-            <span>⏳</span>
-            <span>Usuarios Pendientes de Aprobación ({pendingUsers.length})</span>
-          </h2>
-          <div className="space-y-3">
-            {pendingUsers.map(user => (
-              <div key={user.id} className="flex items-center justify-between p-4 bg-white rounded-lg shadow-sm">
-                <div className="flex items-center space-x-3">
-                  <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                    <span className="text-gray-600 font-medium text-sm">
-                      {user.email.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{user.email}</p>
-                    <p className="text-sm text-gray-600">Rol: {roles.find(r => r.value === user.role)?.label}</p>
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => approveUser(user.id)}
-                    className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 transition-colors flex items-center space-x-1"
-                  >
-                    <span>✅</span>
-                    <span>Aprobar</span>
-                  </button>
-                  <button
-                    onClick={() => rejectUser(user.id)}
-                    className="bg-red-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-red-700 transition-colors flex items-center space-x-1"
-                  >
-                    <span>❌</span>
-                    <span>Rechazar</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Lista de usuarios activos */}
-      <div className="bg-white rounded-lg shadow-md">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-semibold flex items-center space-x-2">
-            <span>👥</span>
-            <span>Usuarios Activos ({users.length})</span>
-          </h2>
-        </div>
-        <div className="divide-y">
-          {users.length === 0 ? (
-            <div className="text-center py-12">
-              <span className="text-6xl">👥</span>
-              <p className="text-gray-600 text-xl mt-4">No hay usuarios activos</p>
-              <p className="text-gray-500 mt-2">Agrega usuarios para comenzar</p>
-            </div>
-          ) : (
-            users.map(user => (
-              <UserRow
-                key={user.id}
-                user={user}
-                roles={roles}
-                onUpdate={updateUser}
-                onDelete={deleteUser}
-              />
-            ))
-          )}
-        </div>
-      </div>
+function Avatar({ email, size = 'md' }) {
+  const s = size === 'sm' ? 'w-8 h-8 text-sm' : 'w-10 h-10 text-base';
+  const colors = ['from-amber-400 to-amber-600','from-blue-400 to-blue-600','from-emerald-400 to-emerald-600',
+                  'from-purple-400 to-purple-600','from-pink-400 to-pink-600','from-red-400 to-red-600'];
+  const c = colors[email.charCodeAt(0) % colors.length];
+  return (
+    <div className={`${s} rounded-full bg-gradient-to-br ${c} flex items-center justify-center text-white font-bold flex-shrink-0`}>
+      {email.charAt(0).toUpperCase()}
     </div>
   );
 }
 
-// Componente para cada fila de usuario
-function UserRow({ user, roles, onUpdate, onDelete }) {
+function UserRow({ user, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({
     role: user.role,
-    permissions: user.permissions || {
-      canViewStockCard: false,
-      canManageStock: false,
-      canViewAllSales: false,
-      canDeleteSales: false
-    }
+    permissions: user.permissions || { canViewStockCard:false, canManageStock:false, canViewAllSales:false, canDeleteSales:false }
   });
+  const { confirm, ConfirmDialog } = useConfirm();
+  const toast = useToast();
 
-  const currentRole = roles.find(r => r.value === user.role);
-
-  const handleSave = () => {
-    onUpdate(user.id, editData);
-    setEditing(false);
+  const handleSave = async () => {
+    try {
+      await onUpdate(user.id, editData);
+      setEditing(false);
+      toast.success('Usuario actualizado');
+    } catch { toast.error('Error al actualizar'); }
   };
 
-  const handleCancel = () => {
-    setEditData({
-      role: user.role,
-      permissions: user.permissions || {
-        canViewStockCard: false,
-        canManageStock: false,
-        canViewAllSales: false,
-        canDeleteSales: false
-      }
+  const handleDelete = async () => {
+    const ok = await confirm({
+      title: 'Eliminar usuario',
+      message: `¿Eliminar a ${user.email}? Esta acción no se puede deshacer.`,
+      confirmText: 'Eliminar',
+      icon: '👤',
     });
-    setEditing(false);
+    if (ok) onDelete(user.id);
   };
 
-  const permissionNames = {
-    canViewStockCard: '📋 Tarjeta de estiba',
-    canManageStock: '📦 Gestionar inventario',
-    canViewAllSales: '💰 Ver todas las ventas',
-    canDeleteSales: '🗑️ Eliminar ventas'
-  };
+  const activePerms = Object.entries(user.permissions || {}).filter(([,v]) => v).map(([k]) => PERMISSION_LABELS[k]?.label).filter(Boolean);
 
   return (
-    <div className="p-6 hover:bg-gray-50 transition-colors">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 rounded-full bg-gray-300 flex items-center justify-center">
-              <span className="text-gray-600 font-medium">
-                {user.email.charAt(0).toUpperCase()}
-              </span>
+    <>
+      {ConfirmDialog}
+      <div className="p-4 hover:bg-gray-50/50 transition-colors">
+        <div className="flex items-center gap-3">
+          <Avatar email={user.email} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-sm text-gray-900 truncate">{user.email}</span>
+              <RoleBadge role={user.role} />
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {activePerms.length > 0 ? activePerms.join(' · ') : 'Sin permisos especiales'}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {!editing ? (
+              <>
+                <button onClick={() => setEditing(true)} className="px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors">
+                  ✏️ Editar
+                </button>
+                <button onClick={handleDelete} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors">
+                  🗑️
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={handleSave} className="px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg transition-colors">✓ Guardar</button>
+                <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">✕</button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {editing && (
+          <div className="mt-3 pt-3 border-t border-gray-100 ml-13 space-y-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1.5">Rol</label>
+              <div className="flex flex-wrap gap-2">
+                {ROLES.map(r => (
+                  <button
+                    key={r.value} type="button"
+                    onClick={() => setEditData(d => ({...d, role: r.value}))}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                      editData.role === r.value
+                        ? `${r.color} ring-2 ring-offset-1 ring-amber-300`
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
-              <p className="font-medium text-gray-900">{user.email}</p>
-              <p className="text-sm text-gray-500">ID: {user.id}</p>
-            </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${currentRole?.color}`}>
-              {currentRole?.label}
-            </span>
-          </div>
-          
-          {editing ? (
-            <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-lg">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Rol
-                </label>
-                <select
-                  value={editData.role}
-                  onChange={(e) => setEditData({...editData, role: e.target.value})}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  {roles.map(role => (
-                    <option key={role.value} value={role.value}>
-                      {role.label}
-                    </option>
-                  ))}
-                </select>
+              <label className="text-xs font-medium text-gray-500 block mb-1.5">Permisos especiales</label>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(PERMISSION_LABELS).map(([key, { icon, label }]) => (
+                  <label key={key} className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={editData.permissions[key] || false}
+                      onChange={e => setEditData(d => ({...d, permissions: {...d.permissions, [key]: e.target.checked}}))}
+                      className="w-4 h-4 rounded accent-amber-500"
+                    />
+                    <span className="text-xs text-gray-600 group-hover:text-gray-800">{icon} {label}</span>
+                  </label>
+                ))}
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Permisos especiales
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={editData.permissions.canViewStockCard}
-                      onChange={(e) => setEditData({
-                        ...editData,
-                        permissions: {...editData.permissions, canViewStockCard: e.target.checked}
-                      })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">📋 Ver tarjeta de estiba</span>
-                  </label>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={editData.permissions.canManageStock}
-                      onChange={(e) => setEditData({
-                        ...editData,
-                        permissions: {...editData.permissions, canManageStock: e.target.checked}
-                      })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">📦 Gestionar inventario</span>
-                  </label>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={editData.permissions.canViewAllSales}
-                      onChange={(e) => setEditData({
-                        ...editData,
-                        permissions: {...editData.permissions, canViewAllSales: e.target.checked}
-                      })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">💰 Ver todas las ventas</span>
-                  </label>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={editData.permissions.canDeleteSales}
-                      onChange={(e) => setEditData({
-                        ...editData,
-                        permissions: {...editData.permissions, canDeleteSales: e.target.checked}
-                      })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">🗑️ Eliminar ventas</span>
-                  </label>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+export function UserManagement({ onLogout }) {
+  const [users, setUsers] = useState([]);
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [tab, setTab] = useState('active');
+  const [newUser, setNewUser] = useState({
+    email:'', password:'', role:'employee',
+    permissions:{ canViewStockCard:false, canManageStock:false, canViewAllSales:false, canDeleteSales:false }
+  });
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
+
+  const load = async () => {
+    try {
+      const [u, p] = await Promise.all([api.getActiveUsers(onLogout), api.getPendingUsers(onLogout)]);
+      setUsers(u); setPending(p);
+    } catch { toast.error('Error al cargar usuarios'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleApprove = async (id) => {
+    try { await api.approveUser(id, onLogout); await load(); toast.success('Usuario aprobado'); }
+    catch { toast.error('Error al aprobar'); }
+  };
+  const handleReject = async (id) => {
+    const ok = await confirm({ title:'Rechazar usuario', message:'¿Rechazar y eliminar este usuario?', confirmText:'Rechazar', icon:'👤' });
+    if (ok) { await api.deleteUser(id, onLogout); await load(); toast.success('Usuario rechazado'); }
+  };
+  const handleDelete = async (id) => {
+    try { await api.deleteUser(id, onLogout); await load(); toast.success('Usuario eliminado'); }
+    catch { toast.error('Error al eliminar'); }
+  };
+  const handleUpdate = async (id, data) => {
+    await api.updateUser(id, data, onLogout); await load();
+  };
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    try {
+      await api.createUser(newUser, onLogout);
+      setNewUser({ email:'', password:'', role:'employee', permissions:{ canViewStockCard:false, canManageStock:false, canViewAllSales:false, canDeleteSales:false } });
+      setShowForm(false);
+      await load();
+      toast.success('Usuario creado');
+    } catch (err) { toast.error(err.message || 'Error al crear usuario'); }
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-amber-200 border-t-amber-500 rounded-full animate-spin mx-auto mb-3"/>
+        <p className="text-gray-500 text-sm">Cargando usuarios...</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {ConfirmDialog}
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900" style={{fontFamily:"'Playfair Display',serif"}}>👥 Gestión de Usuarios</h2>
+            <p className="text-sm text-gray-500 mt-0.5">{users.length} usuarios activos · {pending.length} pendientes</p>
+          </div>
+          <button onClick={() => setShowForm(s => !s)}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+            <svg className={`w-4 h-4 transition-transform ${showForm ? 'rotate-45' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+            </svg>
+            {showForm ? 'Cancelar' : 'Nuevo Usuario'}
+          </button>
+        </div>
+
+        {/* New user form */}
+        {showForm && (
+          <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-5">
+            <h3 className="font-bold text-gray-800 mb-4">Crear nuevo usuario</h3>
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Email</label>
+                  <input type="email" value={newUser.email} onChange={e => setNewUser(u=>({...u,email:e.target.value}))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400" required/>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Contraseña</label>
+                  <input type="password" value={newUser.password} onChange={e => setNewUser(u=>({...u,password:e.target.value}))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400" required/>
                 </div>
               </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1.5">Rol</label>
+                <div className="flex gap-2">
+                  {ROLES.map(r => (
+                    <button key={r.value} type="button" onClick={() => setNewUser(u=>({...u,role:r.value}))}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${newUser.role===r.value ? `${r.color} ring-2 ring-offset-1 ring-amber-300` : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1.5">Permisos</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(PERMISSION_LABELS).map(([key, {icon, label}]) => (
+                    <label key={key} className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={newUser.permissions[key]} onChange={e => setNewUser(u=>({...u,permissions:{...u.permissions,[key]:e.target.checked}}))}
+                        className="w-4 h-4 rounded accent-amber-500"/>
+                      <span className="text-xs text-gray-600">{icon} {label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <button type="submit" className="w-full sm:w-auto px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-xl transition-colors">
+                Crear Usuario
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Pending */}
+        {pending.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-amber-200 flex items-center gap-2">
+              <span className="text-sm font-bold text-amber-800">⏳ Pendientes de aprobación</span>
+              <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">{pending.length}</span>
+            </div>
+            <div className="divide-y divide-amber-100">
+              {pending.map(u => (
+                <div key={u.id} className="flex items-center gap-3 px-5 py-3">
+                  <Avatar email={u.email} size="sm" />
+                  <span className="flex-1 text-sm font-medium text-gray-800 truncate">{u.email}</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleApprove(u.id)} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors">✓ Aprobar</button>
+                    <button onClick={() => handleReject(u.id)} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-lg transition-colors">✕ Rechazar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Active users */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100">
+            <h3 className="text-sm font-bold text-gray-700">Usuarios activos ({users.length})</h3>
+          </div>
+          {users.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <div className="text-4xl mb-2">👥</div>
+              <p>No hay usuarios activos</p>
             </div>
           ) : (
-            <div className="mt-3">
-              <p className="text-sm text-gray-600">
-                <span className="font-medium">Permisos:</span> {
-                  Object.entries(user.permissions || {})
-                    .filter(([key, value]) => value)
-                    .map(([key]) => permissionNames[key])
-                    .join(', ') || 'Sin permisos especiales'
-                }
-              </p>
+            <div className="divide-y divide-gray-50">
+              {users.map(u => (
+                <UserRow key={u.id} user={u} onUpdate={handleUpdate} onDelete={handleDelete} />
+              ))}
             </div>
-          )}
-        </div>
-        
-        <div className="flex space-x-2">
-          {editing ? (
-            <>
-              <button
-                onClick={handleSave}
-                className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 transition-colors flex items-center space-x-1"
-              >
-                <span>✅</span>
-                <span>Guardar</span>
-              </button>
-              <button
-                onClick={handleCancel}
-                className="bg-gray-400 text-white px-3 py-1 rounded-lg text-sm hover:bg-gray-500 transition-colors flex items-center space-x-1"
-              >
-                <span>❌</span>
-                <span>Cancelar</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setEditing(true)}
-                className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700 transition-colors flex items-center space-x-1"
-              >
-                <span>✏️</span>
-                <span>Editar</span>
-              </button>
-              <button
-                onClick={() => onDelete(user.id)}
-                className="bg-red-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-red-700 transition-colors flex items-center space-x-1"
-              >
-                <span>🗑️</span>
-                <span>Eliminar</span>
-              </button>
-            </>
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

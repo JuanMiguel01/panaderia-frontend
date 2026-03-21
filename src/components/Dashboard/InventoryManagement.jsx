@@ -1,210 +1,262 @@
 // src/components/Dashboard/InventoryManagement.jsx
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { useToast } from '../Toast';
+import { useConfirm } from '../ConfirmModal';
 
-// Función auxiliar para formatear la fecha
-const formatLogDate = (dateString) => {
-  const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-  return new Date(dateString).toLocaleDateString('es-ES', options);
-};
+const fmtDateTime = d => new Date(d).toLocaleDateString('es-ES', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
 
-// Un componente simple para el modal de historial
-const HistoryModal = ({ logs, itemName, onClose }) => (
-  <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50">
-    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl">
-      <h3 className="text-xl font-bold mb-4">Historial de: {itemName}</h3>
-      <div className="max-h-96 overflow-y-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario</th>
-              <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cambio</th>
-              <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad Antes</th>
-              <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad Después</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {logs.length === 0 ? (
-              <tr>
-                <td colSpan="5" className="px-4 py-4 text-center text-gray-500">No hay registros de historial para este insumo.</td>
-              </tr>
-            ) : (
-              logs.map(log => (
-                <tr key={log.id}>
-                  <td className="px-4 py-2 whitespace-nowrap">{formatLogDate(log.created_at)}</td>
-                  <td className="px-4 py-2 whitespace-nowrap">{log.user_email}</td>
-                  <td className={`px-4 py-2 whitespace-nowrap text-right font-semibold ${log.change_amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {log.change_amount > 0 ? `+${log.change_amount}` : log.change_amount}
-                  </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-right">{log.quantity_before}</td>
-                  <td className="px-4 py-2 whitespace-nowrap text-right">{log.quantity_after}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+function HistoryModal({ item, onClose }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const toast = useToast();
+
+  useEffect(() => {
+    api.getInventoryLogs(item.id).then(data => { setLogs(data); setLoading(false); })
+      .catch(() => { toast.error('Error al cargar historial'); setLoading(false); });
+  }, [item.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"/>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="font-bold text-gray-900">{item.name}</h3>
+            <p className="text-xs text-gray-500">Historial de cambios</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
+            <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1 p-4">
+          {loading ? (
+            <div className="flex justify-center py-8"><div className="w-8 h-8 border-4 border-amber-200 border-t-amber-500 rounded-full animate-spin"/></div>
+          ) : logs.length === 0 ? (
+            <p className="text-center text-gray-400 py-8">No hay registros de historial</p>
+          ) : (
+            <div className="space-y-2">
+              {logs.map(log => (
+                <div key={log.id} className={`flex items-center gap-3 p-3 rounded-xl ${log.change_amount > 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 ${log.change_amount > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}>
+                    {log.change_amount > 0 ? '+' : '−'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className={`font-bold text-sm ${log.change_amount > 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {log.change_amount > 0 ? '+' : ''}{log.change_amount} {item.unit}
+                      </span>
+                      <span className="text-xs text-gray-400">{fmtDateTime(log.created_at)}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">
+                      {log.user_email} · {log.quantity_before} → {log.quantity_after} {item.unit}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-      <button onClick={onClose} className="btn btn-secondary mt-4">Cerrar</button>
     </div>
-  </div>
-);
+  );
+}
 
 export function InventoryManagement({ onLogout }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newItem, setNewItem] = useState({ name: '', quantity: '', unit: '' });
-  const [updateAmount, setUpdateAmount] = useState({});
-  
-  // ✅ Nuevos estados para el historial
-  const [historyLogs, setHistoryLogs] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [newItem, setNewItem] = useState({ name:'', quantity:'', unit:'' });
+  const [updateAmounts, setUpdateAmounts] = useState({});
   const [selectedItem, setSelectedItem] = useState(null);
+  const [search, setSearch] = useState('');
+  const toast = useToast();
+  const { confirm, ConfirmDialog } = useConfirm();
 
-  const loadInventory = async () => {
+  const UNIT_PRESETS = ['kg', 'g', 'l', 'ml', 'uds', 'bolsas', 'piezas'];
+
+  const load = async () => {
     try {
-      setLoading(true);
       const data = await api.getInventory(onLogout);
       setItems(data);
-      setError(null);
-    } catch (err) {
-      setError('Error al cargar el inventario.');
-    } finally {
-      setLoading(false);
-    }
+    } catch { toast.error('Error al cargar el inventario'); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    loadInventory();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const handleCreateItem = async (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
     try {
       await api.createInventoryItem(newItem, onLogout);
-      setShowAddForm(false);
-      setNewItem({ name: '', quantity: '', unit: '' });
-      loadInventory();
-    } catch (err) {
-      setError(err.message || 'Error al crear el insumo.');
-    }
+      setNewItem({ name:'', quantity:'', unit:'' });
+      setShowForm(false);
+      await load();
+      toast.success('Insumo creado');
+    } catch (err) { toast.error(err.message || 'Error al crear'); }
   };
 
-  const handleUpdateItem = async (itemId, change) => {
-    if (!change || isNaN(change)) return;
+  const handleUpdate = async (id) => {
+    const change = updateAmounts[id];
+    if (!change || isNaN(Number(change))) { toast.warning('Ingresa un valor válido'); return; }
     try {
-      await api.updateInventoryItem(itemId, change, onLogout);
-      setUpdateAmount({ ...updateAmount, [itemId]: '' });
-      loadInventory();
-    } catch (err) {
-      setError('Error al actualizar el insumo.');
-    }
-  };
-  
-  const handleDeleteItem = async (itemId) => {
-    // Reemplazamos window.confirm con un modal de confirmación si es necesario en una app real
-    if (window.confirm('¿Estás seguro de que quieres eliminar este insumo? Esto eliminará también su historial.')) {
-      try {
-        await api.deleteInventoryItem(itemId, onLogout);
-        loadInventory();
-      } catch (err) {
-        setError('Error al eliminar el insumo.');
-      }
-    }
+      await api.updateInventoryItem(id, change, onLogout);
+      setUpdateAmounts(a => ({...a, [id]: ''}));
+      await load();
+      toast.success(`Stock actualizado (${Number(change) > 0 ? '+' : ''}${change})`);
+    } catch { toast.error('Error al actualizar'); }
   };
 
-  // ✅ Función para ver el historial de un insumo
-  const viewHistory = async (item) => {
-    try {
-      setHistoryLogs([]); // Limpiar logs anteriores
-      setSelectedItem(item); // Establecer el ítem seleccionado para mostrar el modal
-      const logs = await api.getInventoryLogs(item.id, onLogout);
-      setHistoryLogs(logs);
-    } catch (err) {
-      setError('No se pudo cargar el historial.');
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await confirm({ title:`Eliminar "${name}"`, message:'Se eliminará el insumo y todo su historial.', confirmText:'Eliminar', icon:'🌾' });
+    if (!ok) return;
+    try { await api.deleteInventoryItem(id, onLogout); await load(); toast.success('Insumo eliminado'); }
+    catch { toast.error('Error al eliminar'); }
   };
 
-  if (loading) return <div>Cargando inventario...</div>;
+  const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <div className="w-10 h-10 border-4 border-amber-200 border-t-amber-500 rounded-full animate-spin"/>
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-md p-6 flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">📦 Gestión de Insumos</h2>
-        <button onClick={() => setShowAddForm(!showAddForm)} className="btn btn-primary">
-          {showAddForm ? 'Cancelar' : '➕ Añadir Insumo'}
-        </button>
-      </div>
-
-      {error && <div className="bg-red-100 text-red-700 p-3 rounded">{error}</div>}
-
-      {showAddForm && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <form onSubmit={handleCreateItem} className="flex items-end space-x-4">
-            <div className="flex-grow">
-              <label>Nombre del Insumo</label>
-              <input type="text" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} className="input-field" required />
-            </div>
-            <div>
-              <label>Cantidad Inicial</label>
-              <input type="number" value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: e.target.value})} className="input-field" required />
-            </div>
-            <div>
-              <label>Unidad (kg, l, ud.)</label>
-              <input type="text" value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} className="input-field" required />
-            </div>
-            <button type="submit" className="btn btn-secondary">Crear</button>
-          </form>
+    <>
+      {ConfirmDialog}
+      {selectedItem && <HistoryModal item={selectedItem} onClose={() => setSelectedItem(null)} />}
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900" style={{fontFamily:"'Playfair Display',serif"}}>🌾 Inventario de Insumos</h2>
+            <p className="text-sm text-gray-500 mt-0.5">{items.length} insumos registrados</p>
+          </div>
+          <button onClick={() => setShowForm(s => !s)}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+            <svg className={`w-4 h-4 transition-transform ${showForm ? 'rotate-45' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+            </svg>
+            {showForm ? 'Cancelar' : 'Añadir Insumo'}
+          </button>
         </div>
-      )}
 
-      {/* ✅ Renderizar el modal de historial si hay un selectedItem */}
-      {selectedItem && (
-        <HistoryModal 
-          logs={historyLogs} 
-          itemName={selectedItem.name}
-          onClose={() => setSelectedItem(null)} // Cerrar el modal al hacer clic en el botón de cerrar
-        />
-      )}
-
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="th-cell text-left">Insumo</th>
-              <th className="th-cell">Cantidad Actual</th>
-              <th className="th-cell text-left">Actualizar Stock</th>
-              <th className="th-cell">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {items.map(item => (
-              <tr key={item.id}>
-                <td className="td-cell font-bold">{item.name}</td>
-                <td className="td-cell text-center text-2xl font-mono">{item.quantity} <span className="text-sm">{item.unit}</span></td>
-                <td className="td-cell">
-                  <div className="flex items-center space-x-2">
-                    <input 
-                      type="number" 
-                      placeholder="Ej: -5 ó 20"
-                      value={updateAmount[item.id] || ''}
-                      onChange={e => setUpdateAmount({...updateAmount, [item.id]: e.target.value})}
-                      className="input-field w-32"
-                    />
-                    <button onClick={() => handleUpdateItem(item.id, updateAmount[item.id])} className="btn btn-primary !py-1">Actualizar</button>
+        {/* Add form */}
+        {showForm && (
+          <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-5">
+            <h3 className="font-bold text-gray-800 mb-4">Nuevo insumo</h3>
+            <form onSubmit={handleCreate} className="space-y-3">
+              <div className="grid sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-1">
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Nombre *</label>
+                  <input type="text" value={newItem.name} onChange={e => setNewItem(n=>({...n,name:e.target.value}))} required
+                    placeholder="Ej: Harina 000"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"/>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Cantidad inicial *</label>
+                  <input type="number" value={newItem.quantity} onChange={e => setNewItem(n=>({...n,quantity:e.target.value}))} required
+                    placeholder="0"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"/>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Unidad *</label>
+                  <div className="flex gap-2">
+                    <input type="text" value={newItem.unit} onChange={e => setNewItem(n=>({...n,unit:e.target.value}))} required
+                      placeholder="kg"
+                      className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"/>
                   </div>
-                </td>
-                <td className="td-cell text-center">
-                  {/* ✅ Botón para ver el historial */}
-                  <button onClick={() => viewHistory(item)} className="text-blue-500 hover:underline mr-4">Ver Historial</button>
-                  <button onClick={() => handleDeleteItem(item.id)} className="text-red-500 hover:text-red-700">Eliminar</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {UNIT_PRESETS.map(u => (
+                      <button key={u} type="button" onClick={() => setNewItem(n=>({...n,unit:u}))}
+                        className={`text-[10px] px-1.5 py-0.5 rounded border transition-all ${newItem.unit===u ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-gray-200 text-gray-500 hover:border-amber-300'}`}>
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <button type="submit" className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-xl transition-colors">
+                Crear Insumo
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Search */}
+        <div className="relative">
+          <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+          </svg>
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar insumo..."
+            className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"/>
+        </div>
+
+        {/* Items grid */}
+        {filtered.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200">
+            <div className="text-4xl mb-2">🌾</div>
+            <p className="text-gray-500">No se encontraron insumos</p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map(item => {
+              const amount = updateAmounts[item.id] || '';
+              const preview = amount ? Number(item.quantity) + Number(amount) : null;
+              const isLow = item.quantity < 10;
+              return (
+                <div key={item.id} className={`bg-white rounded-2xl border shadow-sm p-4 transition-all ${isLow ? 'border-red-200' : 'border-gray-100 hover:border-amber-200'}`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h4 className="font-bold text-gray-900">{item.name}</h4>
+                      {isLow && <span className="text-[10px] text-red-600 font-semibold bg-red-50 px-1.5 py-0.5 rounded-full">Stock bajo</span>}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-3xl font-extrabold text-gray-900">{item.quantity}</span>
+                      <span className="text-sm text-gray-400 ml-1">{item.unit}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="number"
+                      placeholder="Ej: -5 ó +20"
+                      value={amount}
+                      onChange={e => setUpdateAmounts(a => ({...a, [item.id]: e.target.value}))}
+                      className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                    <button
+                      onClick={() => handleUpdate(item.id)}
+                      disabled={!amount}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
+                    >
+                      OK
+                    </button>
+                  </div>
+                  {preview !== null && (
+                    <p className="text-xs text-center text-gray-500 mb-2">
+                      Resultado: <strong className={preview < 0 ? 'text-red-600' : 'text-emerald-600'}>{preview} {item.unit}</strong>
+                    </p>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button onClick={() => setSelectedItem(item)} className="flex-1 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
+                      📋 Historial
+                    </button>
+                    <button onClick={() => handleDelete(item.id, item.name)} className="py-1.5 px-3 text-xs font-medium text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }

@@ -1,30 +1,90 @@
 /* src/index.css */
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  *, *::before, *::after { box-sizing: border-box; }
   body {
-    @apply bg-cream-100 font-sans text-brown-800;
+    font-family: 'DM Sans', sans-serif;
+    background-color: #faf7f2;
+    color: #1c1917;
+    -webkit-font-smoothing: antialiased;
   }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d6c7a8; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #b09060; }
 }
 
 @layer components {
   .btn {
-    @apply px-4 py-2.5 rounded-lg font-semibold text-white transition-all duration-300 shadow-sm hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transform hover:-translate-y-0.5 focus:outline-none focus:ring-4;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+           focus:outline-none focus:ring-2 focus:ring-offset-1;
   }
   .btn-primary {
-    @apply bg-brown-700 hover:bg-brown-800 focus:ring-amber-300;
+    @apply bg-amber-600 hover:bg-amber-700 text-white focus:ring-amber-400 shadow-sm hover:shadow-md;
   }
   .btn-secondary {
-    @apply bg-accent-500 hover:bg-accent-600 focus:ring-accent-200;
+    @apply bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 focus:ring-gray-300 shadow-sm;
+  }
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white focus:ring-red-400 shadow-sm;
   }
   .input-field {
-    @apply mt-1 block w-full px-4 py-2 bg-white border border-amber-300 rounded-lg shadow-sm text-sm text-brown-900
-           placeholder-brown-400
-           focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500
-           transition-shadow;
+    @apply block w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-xl
+           placeholder-gray-400 text-gray-900
+           focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent
+           transition-all duration-150;
   }
+  .card {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-sm;
+  }
+  .tab-button {
+    @apply px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-150;
+  }
+  .tab-active {
+    @apply bg-amber-600 text-white shadow-sm;
+  }
+  .th-cell {
+    @apply px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider;
+  }
+  .td-cell {
+    @apply px-4 py-3 text-sm text-gray-700;
+  }
+}
+
+/* Animations */
+@keyframes loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.animate-loading-bar {
+  animation: loading-bar 1.5s ease-in-out infinite;
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-modal-in {
+  animation: modal-in 0.2s ease-out forwards;
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+/* Gradient mesh background helper */
+.mesh-bg {
+  background-image:
+    radial-gradient(at 20% 30%, rgba(245,158,11,0.12) 0%, transparent 60%),
+    radial-gradient(at 80% 70%, rgba(180,83,9,0.08) 0%, transparent 60%);
 }
