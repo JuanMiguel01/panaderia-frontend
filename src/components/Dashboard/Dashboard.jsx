@@ -5,297 +5,378 @@ import { BatchCard } from './BatchCard';
 import { UserManagement } from './UserManagement';
 import { StockCard } from './StockCard';
 import { InventoryManagement } from './InventoryManagement';
-import { useToast } from '../Toast';
+import { StatCard, EmptyState, Badge } from '../UI/index';
+import { DashboardSkeleton } from '../UI/SkeletonLoader';
 
-// ---- Stat card ----
-function StatCard({ icon, label, value, sub, color }) {
-  return (
-    <div className={`relative overflow-hidden rounded-2xl p-5 border ${color.bg} ${color.border}`}>
-      <div className={`absolute right-3 top-3 text-3xl opacity-20`}>{icon}</div>
-      <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${color.label}`}>{label}</p>
-      <p className={`text-3xl font-extrabold ${color.value}`}>{value}</p>
-      {sub && <p className={`text-xs mt-1 ${color.sub}`}>{sub}</p>}
-    </div>
-  );
-}
-
-// ---- Collapsible section ----
-function DateSection({ date, children }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="rounded-2xl border border-amber-100 overflow-hidden shadow-sm">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-3 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 transition-colors"
-      >
-        <span className="font-semibold text-amber-900 capitalize text-sm">{date}</span>
-        <svg
-          className={`w-4 h-4 text-amber-600 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
-        </svg>
-      </button>
-      {open && (
-        <div className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4 bg-white">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---- Nav item ----
-function NavItem({ icon, label, active, onClick, badge }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        relative flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-150
-        ${active
-          ? 'bg-amber-600 text-white shadow-md shadow-amber-200'
-          : 'text-gray-600 hover:bg-amber-50 hover:text-amber-800'}
-      `}
-    >
-      <span className="text-base">{icon}</span>
-      <span>{label}</span>
-      {badge > 0 && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-          {badge > 9 ? '9+' : badge}
-        </span>
-      )}
-    </button>
-  );
-}
+const TABS = [
+  { id: 'dashboard', label: 'Ventas',   icon: '📦' },
+  { id: 'stock',     label: 'Estiba',   icon: '📊' },
+  { id: 'inventory', label: 'Insumos',  icon: '🌾', adminOnly: true },
+  { id: 'users',     label: 'Usuarios', icon: '👥', adminOnly: true },
+];
 
 export function Dashboard({
-  user, batches, onLogout,
-  handleCreateBatch, handleDeleteBatch,
-  handleCreateSale, handleUpdateSale, handleDeleteSale,
+  user,
+  batches,
+  isLoadingBatches,
+  onLogout,
+  handleCreateBatch,
+  handleDeleteBatch,
+  handleCreateSale,
+  handleUpdateSale,
+  handleDeleteSale,
   getPermissions,
 }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab]   = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [saleFilters, setSaleFilters] = useState({ paid: 'all', delivered: 'all' });
   const permissions = getPermissions();
-  const toast = useToast();
 
-  // --- Stats ---
+  // ─── Estadísticas globales ──────────────────────────────
   const stats = useMemo(() => {
-    let totalMade = 0, totalSold = 0, totalRevenue = 0, totalPending = 0, totalGifts = 0;
-    for (const batch of batches) {
-      totalMade += batch.quantityMade;
-      for (const sale of batch.sales) {
-        totalSold += sale.quantitySold;
-        if (sale.isGift) { totalGifts += sale.quantitySold; continue; }
-        const amount = sale.quantitySold * (Number(batch.price) || 0);
-        totalRevenue += amount;
-        if (!sale.isPaid) totalPending += amount;
-      }
-    }
-    return { totalMade, totalSold, totalRevenue, totalPending, totalGifts, remaining: totalMade - totalSold };
+    const totalMade     = batches.reduce((s, b) => s + b.quantityMade, 0);
+    const totalSold     = batches.reduce((s, b) => s + b.sales.reduce((ss, sale) => ss + sale.quantitySold, 0), 0);
+    const totalRevenue  = batches.reduce((s, b) => s + b.sales.reduce((ss, sale) =>
+      sale.isGift ? ss : ss + sale.quantitySold * (Number(b.price) || 0), 0), 0);
+    const pendingAmount = batches.reduce((s, b) => s + b.sales.reduce((ss, sale) =>
+      (!sale.isPaid && !sale.isGift) ? ss + sale.quantitySold * (Number(b.price) || 0) : ss, 0), 0);
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayBatches = batches.filter(b => {
+      const d = new Date(b.date).toISOString().split('T')[0];
+      return d === todayStr;
+    });
+
+    return { totalMade, totalSold, totalRevenue, pendingAmount, todayBatches: todayBatches.length };
   }, [batches]);
 
-  // --- Group by date ---
-  const batchesByDate = useMemo(() => {
-    return batches.reduce((acc, batch) => {
-      const date = new Date(batch.date).toLocaleDateString('es-ES', {
-        year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
-      });
-      if (!acc[date]) acc[date] = [];
-      acc[date].push(batch);
-      return acc;
-    }, {});
-  }, [batches]);
+  // ─── Filtrado + agrupado por fecha ──────────────────────
+  const filteredAndGrouped = useMemo(() => {
+    const hasPaidFilter      = saleFilters.paid !== 'all';
+    const hasDeliveredFilter = saleFilters.delivered !== 'all';
+    const hasSearch          = searchQuery.trim().length > 0;
+    const hasAnyFilter       = hasPaidFilter || hasDeliveredFilter || hasSearch;
 
-  // --- Filter batches ---
-  const filteredBatches = useMemo(() => {
-    const result = {};
-    for (const [date, dayBatches] of Object.entries(batchesByDate)) {
-      const filtered = dayBatches.map(batch => {
-        let sales = batch.sales;
-        // Search filter
-        if (searchQuery) {
-          const q = searchQuery.toLowerCase();
-          sales = sales.filter(s =>
-            s.personName.toLowerCase().includes(q) ||
-            batch.breadType.toLowerCase().includes(q)
-          );
+    // 1. Ordenar batches de más reciente a más antiguo
+    const sorted = [...batches].sort((a, b) => {
+      const dateCompare = new Date(b.date) - new Date(a.date);
+      if (dateCompare !== 0) return dateCompare;
+      return b.id - a.id; // Mismo día: el creado después va primero
+    });
+
+    // 2. Aplicar filtros por ventas
+    const filtered = sorted.map(batch => {
+      const q = searchQuery.trim().toLowerCase();
+
+      // Filtrar ventas dentro del lote
+      const filteredSales = batch.sales.filter(sale => {
+        // Filtro de búsqueda: nombre de cliente o tipo de pan
+        if (hasSearch) {
+          const matchesName = sale.personName.toLowerCase().includes(q);
+          const matchesBread = batch.breadType.toLowerCase().includes(q);
+          if (!matchesName && !matchesBread) return false;
         }
-        // Paid/delivered filter
-        sales = sales.filter(sale => {
-          const paidOk = saleFilters.paid === 'all' ||
-            (saleFilters.paid === 'paid' && sale.isPaid) ||
-            (saleFilters.paid === 'not_paid' && !sale.isPaid && !sale.isGift);
-          const delOk = saleFilters.delivered === 'all' ||
-            (saleFilters.delivered === 'delivered' && sale.isDelivered) ||
-            (saleFilters.delivered === 'not_delivered' && !sale.isDelivered);
-          return paidOk && delOk;
-        });
-        return { ...batch, sales };
-      }).filter(b => !searchQuery || b.sales.length > 0);
 
-      if (filtered.length > 0) result[date] = filtered;
+        // Filtro pagado
+        if (saleFilters.paid === 'paid' && !sale.isPaid) return false;
+        if (saleFilters.paid === 'not_paid' && (sale.isPaid || sale.isGift)) return false;
+
+        // Filtro entregado
+        if (saleFilters.delivered === 'delivered' && !sale.isDelivered) return false;
+        if (saleFilters.delivered === 'not_delivered' && sale.isDelivered) return false;
+
+        return true;
+      });
+
+      // Si hay filtros de ventas y el lote no tiene ventas que coincidan → excluir lote
+      // EXCEPCIÓN: si la búsqueda coincide con el tipo de pan, mantener el lote (con sus ventas)
+      if (hasAnyFilter && filteredSales.length === 0) {
+        // Solo incluir el lote vacío si la búsqueda coincide con el tipo de pan
+        // y NO hay filtros de pago/entrega activos
+        const breadMatchesSearch = hasSearch && batch.breadType.toLowerCase().includes(searchQuery.trim().toLowerCase());
+        if (!breadMatchesSearch || hasPaidFilter || hasDeliveredFilter) {
+          return null; // excluir
+        }
+      }
+
+      return { ...batch, sales: hasAnyFilter ? filteredSales : batch.sales };
+    }).filter(Boolean); // quitar nulos
+
+    // 3. Agrupar por fecha (formato legible)
+    const grouped = {};
+    for (const batch of filtered) {
+      // Usamos la fecha en UTC para evitar desfases de zona horaria
+      const rawDate  = new Date(batch.date);
+      const utcDate  = new Date(rawDate.getTime() + rawDate.getTimezoneOffset() * 60000);
+      const dateKey  = utcDate.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        year:    'numeric',
+        month:   'long',
+        day:     'numeric',
+      });
+
+      if (!grouped[dateKey]) grouped[dateKey] = [];
+      grouped[dateKey].push(batch);
     }
-    return result;
-  }, [batchesByDate, searchQuery, saleFilters]);
 
-  const totalDays = Object.keys(batchesByDate).length;
+    return grouped;
+  }, [batches, searchQuery, saleFilters]);
+
+  const hasFilters = saleFilters.paid !== 'all' || saleFilters.delivered !== 'all' || searchQuery.trim();
+  const visibleTabs = TABS.filter(t => !t.adminOnly || permissions.isAdmin);
+  const totalCards  = Object.values(filteredAndGrouped).reduce((s, arr) => s + arr.length, 0);
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSaleFilters({ paid: 'all', delivered: 'all' });
+  };
 
   return (
-    <div className="min-h-screen bg-[#faf7f2] font-sans">
-      {/* Top header */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-amber-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">🥖</span>
-            <span className="font-extrabold text-amber-900 text-xl" style={{fontFamily:"'Playfair Display',serif"}}>
-              Panadería Digital
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex flex-col items-end">
-              <span className="text-xs font-semibold text-gray-700">{user.email}</span>
-              <span className="text-[10px] text-amber-600 font-medium uppercase tracking-wider">{user.role}</span>
+    <div className="min-h-screen">
+      {/* Top nav */}
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-14">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center text-base">🍞</div>
+              <span className="font-display font-semibold text-gray-900 hidden sm:block">Panadería Digital</span>
             </div>
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/>
-              </svg>
-              <span className="hidden sm:inline">Salir</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-xl">
+                <div className="w-6 h-6 rounded-full bg-amber-200 flex items-center justify-center text-xs font-bold text-amber-800">
+                  {user.email.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm text-gray-700 max-w-32 truncate">{user.email}</span>
+                <Badge color={user.role === 'admin' ? 'amber' : user.role === 'manager' ? 'blue' : 'gray'}>
+                  {user.role}
+                </Badge>
+              </div>
+              <button onClick={onLogout} className="btn btn-secondary btn-sm">Salir</button>
+            </div>
           </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {/* Nav tabs */}
-        <nav className="flex flex-wrap gap-2 mb-6">
-          <NavItem icon="📦" label="Ventas Diarias" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          <NavItem icon="📊" label="Estadísticas" active={activeTab === 'stock'} onClick={() => setActiveTab('stock')} />
-          {permissions.isAdmin && (
-            <NavItem icon="🌾" label="Inventario" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
-          )}
-          {permissions.isAdmin && (
-            <NavItem icon="👥" label="Usuarios" active={activeTab === 'users'} onClick={() => setActiveTab('users')} />
-          )}
-        </nav>
+        {/* Tabs */}
+        <div className="mb-6 border-b border-gray-200">
+          <nav className="-mb-px flex gap-1 overflow-x-auto scrollbar-hide">
+            {visibleTabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`tab-button flex items-center gap-1.5 ${activeTab === tab.id ? 'tab-active' : ''}`}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
 
-        {/* Dashboard tab */}
+        {/* ─── Dashboard Tab ──────────────────────────────── */}
         {activeTab === 'dashboard' && (
-          <>
-            {/* Stats row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-              <StatCard
-                icon="🍞" label="Por Cobrar" value={`$${stats.totalPending.toFixed(2)}`}
-                sub={`${batches.reduce((n,b) => n + b.sales.filter(s=>!s.isPaid&&!s.isGift).length, 0)} ventas pendientes`}
-                color={{ bg:'bg-red-50', border:'border-red-100', label:'text-red-500', value:'text-red-700', sub:'text-red-400' }}
-              />
-              <StatCard
-                icon="💰" label="Ingresos Totales" value={`$${stats.totalRevenue.toFixed(2)}`}
-                sub={`De ${totalDays} días de trabajo`}
-                color={{ bg:'bg-emerald-50', border:'border-emerald-100', label:'text-emerald-500', value:'text-emerald-700', sub:'text-emerald-400' }}
-              />
-              <StatCard
-                icon="📦" label="Unidades Vendidas" value={stats.totalSold}
-                sub={`${stats.remaining} sin vender`}
-                color={{ bg:'bg-blue-50', border:'border-blue-100', label:'text-blue-500', value:'text-blue-700', sub:'text-blue-400' }}
-              />
-              <StatCard
-                icon="🎁" label="Regalados" value={stats.totalGifts}
-                sub="Unidades sin cobro"
-                color={{ bg:'bg-purple-50', border:'border-purple-100', label:'text-purple-500', value:'text-purple-700', sub:'text-purple-400' }}
-              />
+          <div className="space-y-6 animate-fadeInUp">
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard icon="🍞" label="Lotes hoy"      value={stats.todayBatches}                        color="amber" />
+              <StatCard icon="📈" label="Total vendido"  value={stats.totalSold}
+                subtitle={`de ${stats.totalMade} producidos`}                                               color="green" />
+              <StatCard icon="💰" label="Ingresos"       value={`$${stats.totalRevenue.toFixed(2)}`}       color="blue" />
+              <StatCard icon="⏳" label="Por cobrar"     value={`$${stats.pendingAmount.toFixed(2)}`}
+                color={stats.pendingAmount > 0 ? 'red' : 'green'} />
             </div>
 
-            {/* Add batch form */}
+            {/* Barra de filtros */}
+            <div className="card card-body py-4 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Búsqueda */}
+                <div className="relative flex-1">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                  <input
+                    type="text"
+                    placeholder="Buscar cliente o tipo de pan..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="input-field pl-9 pr-8"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm"
+                    >✕</button>
+                  )}
+                </div>
+
+                {/* Filtro pago */}
+                <select
+                  value={saleFilters.paid}
+                  onChange={e => setSaleFilters(f => ({ ...f, paid: e.target.value }))}
+                  className={`input-field text-sm ${saleFilters.paid !== 'all' ? 'border-amber-400 ring-1 ring-amber-300' : ''}`}
+                  style={{ minWidth: '155px' }}
+                >
+                  <option value="all">💳 Pago: Todos</option>
+                  <option value="paid">✓ Solo Pagados</option>
+                  <option value="not_paid">✗ Solo No Pagados</option>
+                </select>
+
+                {/* Filtro entrega */}
+                <select
+                  value={saleFilters.delivered}
+                  onChange={e => setSaleFilters(f => ({ ...f, delivered: e.target.value }))}
+                  className={`input-field text-sm ${saleFilters.delivered !== 'all' ? 'border-amber-400 ring-1 ring-amber-300' : ''}`}
+                  style={{ minWidth: '165px' }}
+                >
+                  <option value="all">📦 Entrega: Todos</option>
+                  <option value="delivered">✓ Solo Entregados</option>
+                  <option value="not_delivered">✗ Solo No Entregados</option>
+                </select>
+
+                {hasFilters && (
+                  <button onClick={clearFilters} className="btn btn-secondary btn-sm whitespace-nowrap">
+                    ✕ Limpiar filtros
+                  </button>
+                )}
+              </div>
+
+              {/* Indicador de resultados cuando hay filtros */}
+              {hasFilters && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-gray-500">
+                    {totalCards === 0
+                      ? 'Sin resultados'
+                      : `${totalCards} lote${totalCards !== 1 ? 's' : ''} · ${Object.values(filteredAndGrouped).flat().reduce((s, b) => s + b.sales.length, 0)} venta${Object.values(filteredAndGrouped).flat().reduce((s, b) => s + b.sales.length, 0) !== 1 ? 's' : ''}`
+                    }
+                  </span>
+                  {saleFilters.paid !== 'all' && (
+                    <span className="badge bg-amber-100 text-amber-700">
+                      {saleFilters.paid === 'paid' ? 'Pagados' : 'No pagados'}
+                    </span>
+                  )}
+                  {saleFilters.delivered !== 'all' && (
+                    <span className="badge bg-blue-100 text-blue-700">
+                      {saleFilters.delivered === 'delivered' ? 'Entregados' : 'No entregados'}
+                    </span>
+                  )}
+                  {searchQuery && (
+                    <span className="badge bg-purple-100 text-purple-700">
+                      "{searchQuery}"
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Formulario nuevo lote */}
             {permissions.canManageStock && (
               <AddBatchForm onCreateBatch={handleCreateBatch} />
             )}
 
-            {/* Filter row */}
-            <div className="flex flex-wrap gap-3 mb-5 items-center">
-              <div className="relative flex-1 min-w-[200px]">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Buscar cliente o tipo de pan..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                />
-              </div>
-              <select
-                value={saleFilters.paid}
-                onChange={e => setSaleFilters(f => ({...f, paid: e.target.value}))}
-                className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-              >
-                <option value="all">Todos los pagos</option>
-                <option value="paid">Pagado ✅</option>
-                <option value="not_paid">Pendiente 🔴</option>
-              </select>
-              <select
-                value={saleFilters.delivered}
-                onChange={e => setSaleFilters(f => ({...f, delivered: e.target.value}))}
-                className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-              >
-                <option value="all">Todas las entregas</option>
-                <option value="delivered">Entregado 📦</option>
-                <option value="not_delivered">Sin entregar ⏳</option>
-              </select>
-              {(searchQuery || saleFilters.paid !== 'all' || saleFilters.delivered !== 'all') && (
-                <button
-                  onClick={() => { setSearchQuery(''); setSaleFilters({paid:'all',delivered:'all'}); }}
-                  className="text-sm text-amber-600 hover:text-amber-800 underline"
-                >
-                  Limpiar filtros
-                </button>
-              )}
-            </div>
-
-            {/* Batches */}
-            {Object.keys(filteredBatches).length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
-                <div className="text-6xl mb-3">🔍</div>
-                <p className="text-gray-500 font-medium">No hay lotes que coincidan</p>
-                <p className="text-gray-400 text-sm mt-1">Prueba a cambiar los filtros</p>
-              </div>
+            {/* Lista de lotes agrupados por fecha */}
+            {isLoadingBatches ? (
+              <DashboardSkeleton />
+            ) : Object.keys(filteredAndGrouped).length === 0 ? (
+              <EmptyState
+                icon={hasFilters ? '🔍' : '🍞'}
+                title={hasFilters ? 'Sin resultados para estos filtros' : 'No hay lotes registrados'}
+                description={
+                  hasFilters
+                    ? 'Intenta cambiar o limpiar los filtros aplicados.'
+                    : 'Crea el primer lote de pan del día usando el botón de arriba.'
+                }
+                action={hasFilters && (
+                  <button onClick={clearFilters} className="btn btn-secondary">
+                    Limpiar filtros
+                  </button>
+                )}
+              />
             ) : (
-              <div className="space-y-4">
-                {Object.entries(filteredBatches).map(([date, dayBatches]) => (
-                  <DateSection key={date} date={date}>
-                    {dayBatches.map(batch => (
-                      <BatchCard
-                        key={batch.id}
-                        batch={batch}
-                        user={user}
-                        onCreateSale={handleCreateSale}
-                        onUpdateSale={handleUpdateSale}
-                        onDeleteSale={handleDeleteSale}
-                        onDeleteBatch={handleDeleteBatch}
-                        canManageSales={permissions.canManageSales}
-                        canDeleteSales={permissions.canDeleteSales}
-                        canDeleteBatches={permissions.canDeleteBatches}
-                        isAdmin={permissions.isAdmin}
-                        onLogout={onLogout}
-                      />
-                    ))}
-                  </DateSection>
+              <div className="space-y-8">
+                {Object.entries(filteredAndGrouped).map(([date, dayBatches]) => (
+                  <DaySection
+                    key={date}
+                    date={date}
+                    batches={dayBatches}
+                    permissions={permissions}
+                    handleCreateSale={handleCreateSale}
+                    handleUpdateSale={handleUpdateSale}
+                    handleDeleteSale={handleDeleteSale}
+                    handleDeleteBatch={handleDeleteBatch}
+                    onLogout={onLogout}
+                    hasFilters={hasFilters}
+                  />
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
 
-        {activeTab === 'stock' && <StockCard batches={batches} />}
+        {activeTab === 'stock'     && <StockCard batches={batches} />}
         {activeTab === 'inventory' && permissions.isAdmin && <InventoryManagement onLogout={onLogout} />}
-        {activeTab === 'users' && permissions.isAdmin && <UserManagement onLogout={onLogout} />}
+        {activeTab === 'users'     && permissions.isAdmin && <UserManagement onLogout={onLogout} />}
       </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────
+//  Sección de un día
+// ──────────────────────────────────────────────────────────
+function DaySection({ date, batches, permissions, handleCreateSale, handleUpdateSale, handleDeleteSale, handleDeleteBatch, onLogout, hasFilters }) {
+  const [isOpen, setIsOpen] = useState(true);
+
+  // Calcular si esta fecha es hoy
+  const todayStr = new Date().toLocaleDateString('es-ES', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+  const isToday = date.toLowerCase() === todayStr.toLowerCase();
+
+  const daySold    = batches.reduce((s, b) => s + b.sales.reduce((ss, sale) => ss + sale.quantitySold, 0), 0);
+  const dayRevenue = batches.reduce((s, b) => s + b.sales.reduce((ss, sale) =>
+    sale.isGift ? ss : ss + sale.quantitySold * (Number(b.price) || 0), 0), 0);
+  const dayPending = batches.reduce((s, b) => s + b.sales.reduce((ss, sale) =>
+    (!sale.isPaid && !sale.isGift) ? ss + sale.quantitySold * (Number(b.price) || 0) : ss, 0), 0);
+
+  return (
+    <div>
+      {/* Header del día */}
+      <button
+        onClick={() => setIsOpen(p => !p)}
+        className="flex items-center justify-between w-full mb-3 group text-left"
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="font-display font-semibold text-gray-800 capitalize">
+            {date}
+          </h2>
+          {isToday && <Badge color="amber">Hoy</Badge>}
+          <Badge color="gray">{batches.length} lote{batches.length !== 1 ? 's' : ''}</Badge>
+          {daySold > 0     && <Badge color="green">{daySold} ud. vendidas</Badge>}
+          {dayRevenue > 0  && <Badge color="blue">${dayRevenue.toFixed(2)}</Badge>}
+          {dayPending > 0  && <Badge color="red">Debe ${dayPending.toFixed(2)}</Badge>}
+        </div>
+        <span className={`text-gray-400 text-xs flex-shrink-0 ml-2 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}>▼</span>
+      </button>
+
+      {isOpen && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {batches.map(batch => (
+            <BatchCard
+              key={batch.id}
+              batch={batch}
+              onCreateSale={handleCreateSale}
+              onUpdateSale={handleUpdateSale}
+              onDeleteSale={handleDeleteSale}
+              onDeleteBatch={handleDeleteBatch}
+              canManageSales={permissions.canManageSales}
+              canDeleteSales={permissions.canDeleteSales}
+              canDeleteBatches={permissions.canDeleteBatches}
+              isAdmin={permissions.isAdmin}
+              onLogout={onLogout}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
