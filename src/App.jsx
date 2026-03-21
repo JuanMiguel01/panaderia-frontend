@@ -9,11 +9,12 @@ import { ToastProvider, useToast } from './components/Toast';
 const API_URL = 'https://panaderia-backend-uy2k.onrender.com';
 
 function AppContent() {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
-  const [batches, setBatches] = useState([]);
-  const [socket, setSocket] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser]               = useState(null);
+  const [token, setToken]             = useState(null);
+  const [batches, setBatches]         = useState([]);
+  const [socket, setSocket]           = useState(null);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [socketStatus, setSocketStatus] = useState('disconnected'); // 'connected' | 'reconnecting' | 'disconnected'
   const toast = useToast();
 
   const handleLogout = useCallback(() => {
@@ -26,6 +27,7 @@ function AppContent() {
     setToken(null);
     setUser(null);
     setBatches([]);
+    setSocketStatus('disconnected');
   }, []);
 
   const handleLogin = async (email, password) => {
@@ -51,19 +53,19 @@ function AppContent() {
   const getPermissions = useCallback(() => {
     if (!user) return {
       canViewStockCard: false, canManageStock: false,
-      canViewAllSales: false, canDeleteSales: false,
-      canManageSales: false, canDeleteBatches: false,
-      isManagerOrAdmin: false, isAdmin: false
+      canViewAllSales: false,  canDeleteSales: false,
+      canManageSales: false,   canDeleteBatches: false,
+      isManagerOrAdmin: false, isAdmin: false,
     };
     const { role, permissions: p = {} } = user;
-    const isAdmin = role === 'admin';
+    const isAdmin   = role === 'admin';
     const isManager = role === 'manager';
     return {
       canViewStockCard: p.canViewStockCard || isAdmin || isManager,
-      canManageStock: p.canManageStock || isAdmin || isManager,
-      canViewAllSales: p.canViewAllSales || isAdmin || isManager,
-      canDeleteSales: p.canDeleteSales || isAdmin,
-      canManageSales: p.canDeleteSales || isAdmin || isManager,
+      canManageStock:   p.canManageStock   || isAdmin || isManager,
+      canViewAllSales:  p.canViewAllSales  || isAdmin || isManager,
+      canDeleteSales:   p.canDeleteSales   || isAdmin,
+      canManageSales:   p.canDeleteSales   || isAdmin || isManager,
       canDeleteBatches: isAdmin,
       isManagerOrAdmin: isAdmin || isManager,
       isAdmin,
@@ -73,7 +75,7 @@ function AppContent() {
   // Restore session on mount
   useEffect(() => {
     const savedToken = localStorage.getItem('jwt_token');
-    const savedUser = localStorage.getItem('user_info');
+    const savedUser  = localStorage.getItem('user_info');
     if (savedToken && savedUser) {
       try {
         setToken(savedToken);
@@ -88,11 +90,13 @@ function AppContent() {
     if (!user || !token) return;
     fetchBatches();
 
+    setSocketStatus('reconnecting');
     const newSocket = io(API_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      reconnectionDelayMax: 10000,
     });
 
     setSocket(newSocket);
@@ -104,13 +108,22 @@ function AppContent() {
       } catch {}
     };
 
-    newSocket.on('connect', () => console.log('📡 Socket conectado'));
+    // Connection state listeners
+    newSocket.on('connect',         () => { console.log('📡 Socket conectado'); setSocketStatus('connected'); });
+    newSocket.on('disconnect',      () => { console.log('📡 Socket desconectado'); setSocketStatus('disconnected'); });
+    newSocket.on('reconnecting',    () => setSocketStatus('reconnecting'));
+    newSocket.on('reconnect',       () => { setSocketStatus('connected'); refresh(); });
+    newSocket.on('connect_error',   () => setSocketStatus('disconnected'));
+    newSocket.on('reconnect_error', () => setSocketStatus('disconnected'));
+    newSocket.on('reconnect_failed',() => setSocketStatus('disconnected'));
+
+    // Data events
     newSocket.on('batch:created', refresh);
     newSocket.on('batch:deleted', refresh);
     newSocket.on('batch:updated', refresh);
-    newSocket.on('sale:created', refresh);
-    newSocket.on('sale:updated', refresh);
-    newSocket.on('sale:deleted', refresh);
+    newSocket.on('sale:created',  refresh);
+    newSocket.on('sale:updated',  refresh);
+    newSocket.on('sale:deleted',  refresh);
 
     if (user?.role === 'admin') {
       newSocket.on('user:registered', (u) => {
@@ -119,11 +132,11 @@ function AppContent() {
     }
 
     return () => {
-      ['connect','batch:created','batch:deleted','batch:updated',
-       'sale:created','sale:updated','sale:deleted','user:registered'].forEach(
-        e => newSocket.off(e)
-      );
+      ['connect','disconnect','reconnecting','reconnect','connect_error','reconnect_error','reconnect_failed',
+       'batch:created','batch:deleted','batch:updated','sale:created','sale:updated','sale:deleted','user:registered'
+      ].forEach(e => newSocket.off(e));
       newSocket.disconnect();
+      setSocketStatus('disconnected');
     };
   }, [user, token]);
 
@@ -193,6 +206,7 @@ function AppContent() {
     <Dashboard
       user={user}
       batches={batches}
+      socketStatus={socketStatus}
       onLogout={handleLogout}
       handleCreateBatch={handleCreateBatch}
       handleDeleteBatch={handleDeleteBatch}
