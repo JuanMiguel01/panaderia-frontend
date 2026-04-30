@@ -166,7 +166,7 @@ export function InventoryManagement({ onLogout }) {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">Cantidad inicial *</label>
-                  <input type="number" min="0" value={newItem.quantity} onChange={e => setNewItem(n=>({...n,quantity:e.target.value}))} required
+                  <input type="number" min="0" step="any" value={newItem.quantity} onChange={e => setNewItem(n=>({...n,quantity:e.target.value}))} required
                     placeholder="0"
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"/>
                 </div>
