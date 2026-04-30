@@ -68,7 +68,7 @@ export function InventoryManagement({ onLogout }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [newItem, setNewItem] = useState({ name:'', quantity:'', unit:'' });
+  const [newItem, setNewItem] = useState({ name:'', quantity:'', unit:'', unit_cost:'' });
   const [updateAmounts, setUpdateAmounts] = useState({});
   const [updateCosts,   setUpdateCosts]   = useState({});
   const [updateTypes,   setUpdateTypes]   = useState({});
@@ -93,7 +93,7 @@ export function InventoryManagement({ onLogout }) {
     e.preventDefault();
     try {
       await api.createInventoryItem(newItem, onLogout);
-      setNewItem({ name:'', quantity:'', unit:'' });
+      setNewItem({ name:'', quantity:'', unit:'', unit_cost:'' });
       setShowForm(false);
       await load();
       toast.success('Insumo creado');
@@ -157,8 +157,8 @@ export function InventoryManagement({ onLogout }) {
           <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-5">
             <h3 className="font-bold text-gray-800 mb-4">Nuevo insumo</h3>
             <form onSubmit={handleCreate} className="space-y-3">
-              <div className="grid sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-1">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="lg:col-span-1">
                   <label className="text-xs font-medium text-gray-500 block mb-1">Nombre *</label>
                   <input type="text" value={newItem.name} onChange={e => setNewItem(n=>({...n,name:e.target.value}))} required
                     placeholder="Ej: Harina 000"
@@ -166,17 +166,22 @@ export function InventoryManagement({ onLogout }) {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">Cantidad inicial *</label>
-                  <input type="number" value={newItem.quantity} onChange={e => setNewItem(n=>({...n,quantity:e.target.value}))} required
+                  <input type="number" min="0" value={newItem.quantity} onChange={e => setNewItem(n=>({...n,quantity:e.target.value}))} required
                     placeholder="0"
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"/>
                 </div>
                 <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Costo unitario *</label>
+                  <input type="number" min="0" step="0.01" value={newItem.unit_cost} onChange={e => setNewItem(n=>({...n,unit_cost:e.target.value}))} required
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 text-sm border border-emerald-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400"/>
+                  <p className="text-[10px] text-gray-400 mt-1">Precio de compra por unidad</p>
+                </div>
+                <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">Unidad *</label>
-                  <div className="flex gap-2">
-                    <input type="text" value={newItem.unit} onChange={e => setNewItem(n=>({...n,unit:e.target.value}))} required
-                      placeholder="kg"
-                      className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"/>
-                  </div>
+                  <input type="text" value={newItem.unit} onChange={e => setNewItem(n=>({...n,unit:e.target.value}))} required
+                    placeholder="kg"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"/>
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {UNIT_PRESETS.map(u => (
                       <button key={u} type="button" onClick={() => setNewItem(n=>({...n,unit:u}))}
