@@ -70,6 +70,8 @@ export function InventoryManagement({ onLogout }) {
   const [showForm, setShowForm] = useState(false);
   const [newItem, setNewItem] = useState({ name:'', quantity:'', unit:'' });
   const [updateAmounts, setUpdateAmounts] = useState({});
+  const [updateCosts,   setUpdateCosts]   = useState({});
+  const [updateTypes,   setUpdateTypes]   = useState({});
   const [selectedItem, setSelectedItem] = useState(null);
   const [search, setSearch] = useState('');
   const toast = useToast();
@@ -99,14 +101,20 @@ export function InventoryManagement({ onLogout }) {
   };
 
   const handleUpdate = async (id) => {
-    const change = updateAmounts[id];
-    if (!change || isNaN(Number(change))) { toast.warning('Ingresa un valor válido'); return; }
+    const type   = updateTypes[id] || 'compra';
+    const amount = Number(updateAmounts[id]);
+    const cost   = updateCosts[id] !== undefined ? Number(updateCosts[id]) : undefined;
+    if (!updateAmounts[id] || isNaN(amount) || amount === 0) { toast.warning('Ingresa una cantidad válida'); return; }
+    if (type === 'compra' && (cost === undefined || isNaN(cost) || cost < 0)) { toast.warning('Ingresa el costo unitario de la compra'); return; }
+    const change = type === 'compra' ? Math.abs(amount) : -Math.abs(amount);
+    const unitCost = type === 'compra' ? cost : undefined;
     try {
-      await api.updateInventoryItem(id, change, onLogout);
+      await api.updateInventoryItem(id, change, unitCost, onLogout);
       setUpdateAmounts(a => ({...a, [id]: ''}));
+      setUpdateCosts(a  => ({...a, [id]: ''}));
       await load();
-      toast.success(`Stock actualizado (${Number(change) > 0 ? '+' : ''}${change})`);
-    } catch { toast.error('Error al actualizar'); }
+      toast.success(type === 'compra' ? `Entrada: +${Math.abs(change)} (costo $${cost}/u)` : `Consumo: -${Math.abs(change)}`);
+    } catch (err) { toast.error(err.message || 'Error al actualizar'); }
   };
 
   const handleDelete = async (id, name) => {
@@ -205,45 +213,71 @@ export function InventoryManagement({ onLogout }) {
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(item => {
-              const amount = updateAmounts[item.id] || '';
-              const preview = amount ? Number(item.quantity) + Number(amount) : null;
-              const isLow = item.quantity < 10;
+              const type    = updateTypes[item.id]   || 'compra';
+              const amount  = updateAmounts[item.id] || '';
+              const cost    = updateCosts[item.id]   || '';
+              const delta   = amount ? (type === 'compra' ? Math.abs(Number(amount)) : -Math.abs(Number(amount))) : null;
+              const preview = delta !== null ? Number(item.quantity) + delta : null;
+              const isLow   = item.quantity < 10;
               return (
                 <div key={item.id} className={`bg-white rounded-2xl border shadow-sm p-4 transition-all ${isLow ? 'border-red-200' : 'border-gray-100 hover:border-amber-200'}`}>
-                  <div className="flex items-start justify-between mb-3">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-2">
                     <div>
                       <h4 className="font-bold text-gray-900">{item.name}</h4>
                       {isLow && <span className="text-[10px] text-red-600 font-semibold bg-red-50 px-1.5 py-0.5 rounded-full">Stock bajo</span>}
                     </div>
                     <div className="text-right">
-                      <span className="text-3xl font-extrabold text-gray-900">{item.quantity}</span>
+                      <span className="text-2xl font-extrabold text-gray-900">{Number(item.quantity).toFixed(2)}</span>
                       <span className="text-sm text-gray-400 ml-1">{item.unit}</span>
                     </div>
                   </div>
 
-                  <div className="flex gap-2 mb-3">
-                    <input
-                      type="number"
-                      placeholder="Ej: -5 ó +20"
+                  {/* Costo promedio */}
+                  <p className="text-xs text-gray-400 mb-3">
+                    Costo promedio: <strong className="text-gray-600">
+                      {Number(item.unit_cost) > 0 ? `$${Number(item.unit_cost).toFixed(2)}/${item.unit}` : '—'}
+                    </strong>
+                  </p>
+
+                  {/* Type toggle */}
+                  <div className="flex rounded-lg overflow-hidden border border-gray-200 mb-2 text-xs font-semibold">
+                    {[['compra','🟢 Compra'],['consumo','🔴 Consumo']].map(([v,lbl]) => (
+                      <button key={v} type="button"
+                        onClick={() => setUpdateTypes(t => ({...t, [item.id]: v}))}
+                        className={`flex-1 py-1.5 transition-colors ${type===v ? (v==='compra'?'bg-emerald-500 text-white':'bg-red-500 text-white') : 'text-gray-500 hover:bg-gray-50'}`}>
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Amount input */}
+                  <div className="flex gap-2 mb-1">
+                    <input type="number" min="0" placeholder="Cantidad"
                       value={amount}
                       onChange={e => setUpdateAmounts(a => ({...a, [item.id]: e.target.value}))}
-                      className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
-                    />
-                    <button
-                      onClick={() => handleUpdate(item.id)}
-                      disabled={!amount}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
-                    >
+                      className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"/>
+                    <button onClick={() => handleUpdate(item.id)} disabled={!amount}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors">
                       OK
                     </button>
                   </div>
+
+                  {/* Cost input (only for purchase) */}
+                  {type === 'compra' && (
+                    <input type="number" min="0" placeholder="Costo unitario ($)"
+                      value={cost}
+                      onChange={e => setUpdateCosts(c => ({...c, [item.id]: e.target.value}))}
+                      className="w-full px-3 py-1.5 text-sm border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 mb-1"/>
+                  )}
+
                   {preview !== null && (
                     <p className="text-xs text-center text-gray-500 mb-2">
-                      Resultado: <strong className={preview < 0 ? 'text-red-600' : 'text-emerald-600'}>{preview} {item.unit}</strong>
+                      Resultado: <strong className={preview < 0 ? 'text-red-600' : 'text-emerald-600'}>{Number(preview).toFixed(2)} {item.unit}</strong>
                     </p>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mt-2">
                     <button onClick={() => setSelectedItem(item)} className="flex-1 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
                       📋 Historial
                     </button>

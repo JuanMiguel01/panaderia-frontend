@@ -40,11 +40,29 @@ export const api = {
   createUser:      (data, onAuthError)      => _fetch('/api/users', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
 
   // Inventory
-  getInventory:        (onAuthError)              => _fetch('/api/inventory', {}, onAuthError),
-  createInventoryItem: (data, onAuthError)        => _fetch('/api/inventory', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
-  updateInventoryItem: (itemId, change, onAuthError) => _fetch(`/api/inventory/${itemId}`, { method: 'PATCH', body: JSON.stringify({ change }) }, onAuthError),
-  deleteInventoryItem: (itemId, onAuthError)      => _fetch(`/api/inventory/${itemId}`, { method: 'DELETE' }, onAuthError),
-  getInventoryLogs:    (itemId, onAuthError)      => _fetch(`/api/inventory/${itemId}/logs`, {}, onAuthError),
+  getInventory:        (onAuthError)                        => _fetch('/api/inventory', {}, onAuthError),
+  createInventoryItem: (data, onAuthError)                  => _fetch('/api/inventory', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
+  updateInventoryItem: (itemId, change, unitCost, onAuthError) =>
+    _fetch(`/api/inventory/${itemId}`, { method: 'PATCH', body: JSON.stringify({ change, unit_cost: unitCost }) }, onAuthError),
+  deleteInventoryItem: (itemId, onAuthError)                => _fetch(`/api/inventory/${itemId}`, { method: 'DELETE' }, onAuthError),
+  getInventoryLogs:    (itemId, onAuthError)                => _fetch(`/api/inventory/${itemId}/logs`, {}, onAuthError),
+  getInventoryDaily:   (date, onAuthError)                  => _fetch(`/api/inventory/daily/${date}`, {}, onAuthError),
+
+  // Gastos del cuadre
+  getGastos:    (date, onAuthError)         => _fetch(`/api/gastos/${date}`, {}, onAuthError),
+  createGasto:  (data, onAuthError)         => _fetch('/api/gastos', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
+  deleteGasto:  (id, onAuthError)           => _fetch(`/api/gastos/${id}`, { method: 'DELETE' }, onAuthError),
+
+  // Fondos de socios
+  getFondos:      (onAuthError)                   => _fetch('/api/fondos', {}, onAuthError),
+  ajustarFondo:   (persona, saldo, onAuthError)   => _fetch(`/api/fondos/${persona}`, { method: 'PATCH', body: JSON.stringify({ saldo }) }, onAuthError),
+  cierreDiario:   (date, onAuthError)             => _fetch(`/api/fondos/cierre/${date}`, { method: 'POST' }, onAuthError),
+
+  // Deudas
+  getDeudas:    (onAuthError)            => _fetch('/api/deudas', {}, onAuthError),
+  createDeuda:  (data, onAuthError)      => _fetch('/api/deudas', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
+  updateDeuda:  (id, data, onAuthError)  => _fetch(`/api/deudas/${id}`, { method: 'PATCH', body: JSON.stringify(data) }, onAuthError),
+  deleteDeuda:  (id, onAuthError)        => _fetch(`/api/deudas/${id}`, { method: 'DELETE' }, onAuthError),
 
   // Bread Presets
   getPresets:    (onAuthError)            => _fetch('/api/presets', {}, onAuthError),

@@ -7,6 +7,7 @@ import { StockCard } from './StockCard';
 import { InventoryManagement } from './InventoryManagement';
 import { PresetsManagement } from './PresetsManagement';
 import { CuadreDelDia } from './CuadreDelDia';
+import { DeudaManagement } from './DeudaManagement';
 import { StatCard, EmptyState, Badge } from '../UI/index';
 import { DashboardSkeleton } from '../UI/SkeletonLoader';
 
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'dashboard', label: 'Ventas',    icon: '📦' },
   { id: 'stock',     label: 'Estiba',    icon: '📊' },
   { id: 'cuadre',   label: 'Cuadre',    icon: '📋', adminOnly: true },
+  { id: 'deudas',   label: 'Deudas',    icon: '💸', adminOnly: true },
   { id: 'inventory', label: 'Insumos',   icon: '🌾', adminOnly: true },
   { id: 'presets',   label: 'Panes',     icon: '🥖', adminOnly: true },
   { id: 'users',     label: 'Usuarios',  icon: '👥', adminOnly: true },
@@ -331,7 +333,8 @@ export function Dashboard({
         )}
 
         {activeTab === 'stock'     && <StockCard batches={batches} />}
-        {activeTab === 'cuadre'   && permissions.isAdmin && <CuadreDelDia batches={batches} />}
+        {activeTab === 'cuadre'   && permissions.isAdmin && <CuadreDelDia batches={batches} onLogout={onLogout} />}
+        {activeTab === 'deudas'   && permissions.isAdmin && <DeudaManagement onLogout={onLogout} />}
         {activeTab === 'inventory' && permissions.isAdmin && <InventoryManagement onLogout={onLogout} />}
         {activeTab === 'presets'   && permissions.isAdmin && <PresetsManagement onLogout={onLogout} />}
         {activeTab === 'users'     && permissions.isAdmin && <UserManagement onLogout={onLogout} />}
