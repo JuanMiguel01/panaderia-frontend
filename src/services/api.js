@@ -42,8 +42,8 @@ export const api = {
   // Inventory
   getInventory:        (onAuthError)                        => _fetch('/api/inventory', {}, onAuthError),
   createInventoryItem: (data, onAuthError)                  => _fetch('/api/inventory', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
-  updateInventoryItem: (itemId, change, unitCost, onAuthError) =>
-    _fetch(`/api/inventory/${itemId}`, { method: 'PATCH', body: JSON.stringify({ change, unit_cost: unitCost }) }, onAuthError),
+  updateInventoryItem: (itemId, change, unitCost, logDate, onAuthError) =>
+    _fetch(`/api/inventory/${itemId}`, { method: 'PATCH', body: JSON.stringify({ change, unit_cost: unitCost, log_date: logDate }) }, onAuthError),
   deleteInventoryItem: (itemId, onAuthError)                => _fetch(`/api/inventory/${itemId}`, { method: 'DELETE' }, onAuthError),
   getInventoryLogs:    (itemId, onAuthError)                => _fetch(`/api/inventory/${itemId}/logs`, {}, onAuthError),
   getInventoryDaily:   (date, onAuthError)                  => _fetch(`/api/inventory/daily/${date}`, {}, onAuthError),

@@ -72,6 +72,7 @@ export function InventoryManagement({ onLogout }) {
   const [updateAmounts, setUpdateAmounts] = useState({});
   const [updateCosts,   setUpdateCosts]   = useState({});
   const [updateTypes,   setUpdateTypes]   = useState({});
+  const [updateDates,   setUpdateDates]   = useState({});
   const [selectedItem, setSelectedItem] = useState(null);
   const [search, setSearch] = useState('');
   const toast = useToast();
@@ -100,20 +101,24 @@ export function InventoryManagement({ onLogout }) {
     } catch (err) { toast.error(err.message || 'Error al crear'); }
   };
 
+  const todayStr = () => new Date().toISOString().split('T')[0];
+
   const handleUpdate = async (id) => {
-    const type   = updateTypes[id] || 'compra';
-    const amount = Number(updateAmounts[id]);
-    const cost   = updateCosts[id] !== undefined ? Number(updateCosts[id]) : undefined;
+    const type    = updateTypes[id]  || 'compra';
+    const amount  = Number(updateAmounts[id]);
+    const cost    = updateCosts[id] !== undefined ? Number(updateCosts[id]) : undefined;
+    const logDate = updateDates[id]  || todayStr();
     if (!updateAmounts[id] || isNaN(amount) || amount === 0) { toast.warning('Ingresa una cantidad válida'); return; }
     if (type === 'compra' && (cost === undefined || isNaN(cost) || cost < 0)) { toast.warning('Ingresa el costo unitario de la compra'); return; }
-    const change = type === 'compra' ? Math.abs(amount) : -Math.abs(amount);
+    const change   = type === 'compra' ? Math.abs(amount) : -Math.abs(amount);
     const unitCost = type === 'compra' ? cost : undefined;
     try {
-      await api.updateInventoryItem(id, change, unitCost, onLogout);
+      await api.updateInventoryItem(id, change, unitCost, logDate, onLogout);
       setUpdateAmounts(a => ({...a, [id]: ''}));
       setUpdateCosts(a  => ({...a, [id]: ''}));
+      setUpdateDates(a  => ({...a, [id]: ''}));
       await load();
-      toast.success(type === 'compra' ? `Entrada: +${Math.abs(change)} (costo $${cost}/u)` : `Consumo: -${Math.abs(change)}`);
+      toast.success(type === 'compra' ? `Entrada: +${Math.abs(change)} (costo $${cost}/u)` : `Consumo: -${Math.abs(change)} · ${logDate}`);
     } catch (err) { toast.error(err.message || 'Error al actualizar'); }
   };
 
@@ -221,6 +226,7 @@ export function InventoryManagement({ onLogout }) {
               const type    = updateTypes[item.id]   || 'compra';
               const amount  = updateAmounts[item.id] || '';
               const cost    = updateCosts[item.id]   || '';
+              const logDate = updateDates[item.id]   || '';
               const delta   = amount ? (type === 'compra' ? Math.abs(Number(amount)) : -Math.abs(Number(amount))) : null;
               const preview = delta !== null ? Number(item.quantity) + delta : null;
               const isLow   = item.quantity < 10;
@@ -270,10 +276,18 @@ export function InventoryManagement({ onLogout }) {
 
                   {/* Cost input (only for purchase) */}
                   {type === 'compra' && (
-                    <input type="number" min="0" placeholder="Costo unitario ($)"
+                    <input type="number" min="0" step="0.01" placeholder="Costo unitario ($)"
                       value={cost}
                       onChange={e => setUpdateCosts(c => ({...c, [item.id]: e.target.value}))}
                       className="w-full px-3 py-1.5 text-sm border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 mb-1"/>
+                  )}
+
+                  {/* Date picker (only for consume) */}
+                  {type === 'consumo' && (
+                    <input type="date"
+                      value={logDate || new Date().toISOString().split('T')[0]}
+                      onChange={e => setUpdateDates(d => ({...d, [item.id]: e.target.value}))}
+                      className="w-full px-3 py-1.5 text-sm border border-red-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300 mb-1"/>
                   )}
 
                   {preview !== null && (
