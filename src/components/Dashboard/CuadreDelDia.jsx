@@ -8,55 +8,164 @@ const PARTNERS = [
   { key: 'michel', label: 'Michel' },
   { key: 'nadiel', label: 'Nadiel' },
 ];
+
 const GASTO_CATS = [
-  { key: 'generales', label: 'Gastos Generales', color: 'orange' },
-  { key: 'jm',        label: 'Gastos JM',        color: 'blue'   },
-  { key: 'michel',    label: 'Gastos Michel',     color: 'purple' },
-  { key: 'nadiel',    label: 'Gastos Nadiel',     color: 'pink'   },
-  { key: 'fondo',     label: 'Gastos del Fondo',  color: 'gray'   },
+  { key: 'generales', label: 'Gastos Generales', hint: 'Operativos del negocio (salarios, guardia, etc.). Restan de la utilidad bruta.' },
+  { key: 'jm',        label: 'Gastos JM',        hint: 'Gastos personales de JM. Restan de su parte individual.' },
+  { key: 'michel',    label: 'Gastos Michel',     hint: 'Gastos personales de Michel. Restan de su parte individual.' },
+  { key: 'nadiel',    label: 'Gastos Nadiel',     hint: 'Gastos personales de Nadiel. Restan de su parte individual.' },
+  { key: 'fondo',     label: 'Gastos del Fondo',  hint: 'Compras de insumos u otros gastos de caja. Restan del Fondo General pero NO afectan la utilidad.' },
 ];
 
 function numV(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 function fmt(n)  { return Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtQ(n) { return Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-// ─── Small reusable UI ────────────────────────────────────────────────────────
+// ─── CSV / Excel export ───────────────────────────────────────────────────────
 
-function SectionCard({ title, subtitle, children, badge }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold text-gray-800">{title}</h3>
-          {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
-        </div>
-        {badge}
-      </div>
-      <div className="p-5">{children}</div>
-    </div>
-  );
+function exportToCSV({ date, productRows, totalVentas, inventoryItems, costoInsumos,
+                       gastosMap, utilidadBruta, utilidadNeta, parteBase,
+                       partnerCalc, fondos }) {
+  const row  = (...cells) => cells.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
+  const sep  = () => '';
+  const lines = [];
+
+  lines.push(row(`CUADRE DEL DÍA — ${date}`));
+  lines.push(sep());
+
+  // ── Productos ──
+  lines.push(row('PRODUCTOS'));
+  lines.push(row('Producto','Inicio','Entrada','Total','Merma','Retorno','Venta','Precio Venta','Importe'));
+  for (const r of productRows) {
+    lines.push(row(r.breadType, 0, r.entrada, r.total, r.merma, 0, r.venta, r.price, r.importe));
+  }
+  lines.push(row('','','','','','','Total Importe',''  , totalVentas));
+  lines.push(sep());
+
+  // ── Almacén ──
+  lines.push(row('ALMACÉN'));
+  lines.push(row('Insumo','Inicio','Entrada','Total','Salida','Final','Precio Costo','Costo Salida'));
+  for (const i of inventoryItems) {
+    lines.push(row(i.name, fmtQ(i.inicio), fmtQ(i.entrada),
+      fmtQ(numV(i.inicio)+numV(i.entrada)), fmtQ(i.salida), fmtQ(i.final_qty),
+      numV(i.unit_cost) > 0 ? fmt(i.unit_cost) : 0, numV(i.costo_salida) > 0 ? fmt(i.costo_salida) : 0));
+  }
+  lines.push(row('','','','','','','Total Costo Insumos', fmt(costoInsumos)));
+  lines.push(sep());
+
+  // ── Gastos ──
+  lines.push(row('GASTOS', 'Generales', 'JM', 'Michel', 'Nadiel', 'Fondo'));
+  lines.push(row('Total',
+    fmt(gastosMap.generales), fmt(gastosMap.jm),
+    fmt(gastosMap.michel),    fmt(gastosMap.nadiel), fmt(gastosMap.fondo || 0)));
+  lines.push(sep());
+
+  // ── Resultado ──
+  lines.push(row('RESULTADO'));
+  lines.push(row('Total Ventas','Costo Insumos','Utilidad Bruta','Gastos Generales','Utilidad Neta'));
+  lines.push(row(fmt(totalVentas), fmt(costoInsumos), fmt(utilidadBruta), fmt(gastosMap.generales), fmt(utilidadNeta)));
+  lines.push(sep());
+
+  // ── Distribución ──
+  lines.push(row('DISTRIBUCIÓN DE UTILIDADES'));
+  lines.push(row('Socio','Parte Base (UN÷3)','Gastos Individuales','Utilidad Final'));
+  for (const p of partnerCalc) {
+    lines.push(row(p.label, fmt(parteBase), fmt(p.gastosInd), fmt(p.utilidadFinal)));
+  }
+  lines.push(sep());
+
+  // ── Fondos ──
+  lines.push(row('FONDOS ACUMULADOS'));
+  lines.push(row('Fondo','Saldo'));
+  const indFondos = fondos.filter(f => f.persona !== 'general');
+  const genFondo  = fondos.find(f => f.persona === 'general');
+  for (const f of indFondos) lines.push(row(f.persona.toUpperCase(), fmt(f.saldo)));
+  if (genFondo) lines.push(row('GENERAL (Caja)', fmt(genFondo.saldo)));
+
+  const csv = '﻿' + lines.join('\n'); // BOM for Excel UTF-8
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `cuadre_${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
-function KpiCard({ label, value, sub, color = 'blue' }) {
-  const palette = {
-    green:  'bg-emerald-50 border-emerald-100 text-emerald-600 val-emerald-700',
-    red:    'bg-red-50 border-red-100 text-red-600 val-red-700',
-    blue:   'bg-blue-50 border-blue-100 text-blue-600 val-blue-700',
-    orange: 'bg-orange-50 border-orange-100 text-orange-600 val-orange-700',
-    amber:  'bg-amber-50 border-amber-100 text-amber-600 val-amber-700',
-    gray:   'bg-gray-50 border-gray-100 text-gray-500 val-gray-700',
+// ─── Fondo inicial setup ──────────────────────────────────────────────────────
+
+function FondoSetup({ fondos, onAjustar }) {
+  const [open,   setOpen]   = useState(false);
+  const [values, setValues] = useState({});
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+
+  const FONDOS_LABELS = [
+    { key: 'jm',      label: 'Fondo JM',      hint: 'Utilidades acumuladas de JM' },
+    { key: 'michel',  label: 'Fondo Michel',   hint: 'Utilidades acumuladas de Michel' },
+    { key: 'nadiel',  label: 'Fondo Nadiel',   hint: 'Utilidades acumuladas de Nadiel' },
+    { key: 'general', label: 'Fondo General',  hint: 'Saldo de caja del negocio' },
+  ];
+
+  useEffect(() => {
+    if (fondos.length) {
+      const init = {};
+      for (const f of fondos) init[f.persona] = String(numV(f.saldo));
+      setValues(init);
+    }
+  }, [fondos]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      for (const { key } of FONDOS_LABELS) {
+        if (values[key] !== undefined) await onAjustar(key, Number(values[key]));
+      }
+      toast.success('Fondos actualizados');
+      setOpen(false);
+    } catch { toast.error('Error al guardar fondos'); }
+    finally { setSaving(false); }
   };
-  const [bg, border, lbl] = (palette[color] || palette.blue).split(' ');
+
   return (
-    <div className={`${bg} ${border} border rounded-2xl p-4 text-center`}>
-      <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${lbl}`}>{label}</p>
-      <p className={`text-xl font-extrabold text-gray-800`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    <div className="border border-indigo-100 rounded-2xl overflow-hidden">
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-3 bg-indigo-50 hover:bg-indigo-100 transition-colors text-left">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-indigo-700">⚙️ Configurar saldos iniciales</span>
+          <span className="text-xs text-indigo-400">— Úsalo una sola vez para establecer la base</span>
+        </div>
+        <span className={`text-indigo-400 text-xs transition-transform ${open ? '' : '-rotate-90'}`}>▼</span>
+      </button>
+
+      {open && (
+        <div className="bg-white px-5 py-4 space-y-3">
+          <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            ⚠️ Esto <strong>reemplaza</strong> el saldo actual. Úsalo solo para configurar el valor inicial o para corregir un error.
+          </p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {FONDOS_LABELS.map(({ key, label, hint }) => (
+              <div key={key}>
+                <label className="text-xs font-medium text-gray-600 block mb-1">{label}</label>
+                <input type="number" step="0.01"
+                  value={values[key] ?? ''}
+                  onChange={e => setValues(v => ({ ...v, [key]: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+                <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>
+              </div>
+            ))}
+          </div>
+          <button onClick={handleSave} disabled={saving}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors">
+            {saving ? 'Guardando…' : 'Guardar saldos'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Gastos section (pulls from DB) ──────────────────────────────────────────
+// ─── Gastos section ───────────────────────────────────────────────────────────
 
 function GastosSection({ date, gastos, loading, onAdd, onDelete }) {
   const [drafts, setDrafts] = useState(
@@ -65,10 +174,8 @@ function GastosSection({ date, gastos, loading, onAdd, onDelete }) {
 
   const totals = useMemo(() => {
     const t = {};
-    for (const c of GASTO_CATS) {
+    for (const c of GASTO_CATS)
       t[c.key] = gastos.filter(g => g.category === c.key).reduce((s, g) => s + numV(g.monto), 0);
-    }
-    t.all = GASTO_CATS.reduce((s, c) => s + t[c.key], 0);
     return t;
   }, [gastos]);
 
@@ -79,22 +186,26 @@ function GastosSection({ date, gastos, loading, onAdd, onDelete }) {
     setDrafts(prev => ({ ...prev, [cat]: { concepto: '', monto: '' } }));
   };
 
-  if (loading) return <div className="h-20 flex items-center justify-center text-gray-400 text-sm">Cargando gastos…</div>;
+  if (loading) return <div className="h-16 flex items-center justify-center text-gray-400 text-sm">Cargando…</div>;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
       {GASTO_CATS.map(cat => {
-        const rows = gastos.filter(g => g.category === cat.key);
+        const rows  = gastos.filter(g => g.category === cat.key);
         const draft = drafts[cat.key];
+        const isFondo = cat.key === 'fondo';
         return (
-          <div key={cat.key} className="border border-gray-100 rounded-xl p-3 flex flex-col">
-            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{cat.label}</h4>
+          <div key={cat.key} className={`border rounded-xl p-3 flex flex-col ${isFondo ? 'border-gray-200 bg-gray-50' : 'border-gray-100'}`}>
+            <div className="flex items-start gap-1 mb-2">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex-1">{cat.label}</h4>
+              {isFondo && <span className="text-[9px] bg-gray-200 text-gray-500 px-1 rounded font-medium">No afecta utilidad</span>}
+            </div>
+            <p className="text-[9px] text-gray-400 mb-2 leading-tight">{cat.hint}</p>
 
-            {/* Existing rows */}
             <div className="space-y-1 flex-1 mb-2">
               {rows.map(g => (
                 <div key={g.id} className="flex items-center gap-1 group">
-                  <span className="flex-1 text-xs text-gray-600 truncate" title={g.concepto}>{g.concepto || '—'}</span>
+                  <span className="flex-1 text-xs text-gray-600 truncate">{g.concepto || '—'}</span>
                   <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">${fmt(g.monto)}</span>
                   <button onClick={() => onDelete(g.id)}
                     className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all text-base leading-none">×</button>
@@ -103,7 +214,6 @@ function GastosSection({ date, gastos, loading, onAdd, onDelete }) {
               {rows.length === 0 && <p className="text-xs text-gray-300 italic">Sin gastos</p>}
             </div>
 
-            {/* Add row */}
             <div className="space-y-1 pt-2 border-t border-gray-100">
               <input type="text" placeholder="Concepto" value={draft.concepto}
                 onChange={e => setDrafts(p => ({ ...p, [cat.key]: { ...p[cat.key], concepto: e.target.value } }))}
@@ -114,7 +224,7 @@ function GastosSection({ date, gastos, loading, onAdd, onDelete }) {
                   onKeyDown={e => e.key === 'Enter' && handleAdd(cat.key)}
                   className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"/>
                 <button onClick={() => handleAdd(cat.key)} disabled={!draft.monto}
-                  className="px-2 py-1 bg-amber-500 hover:bg-amber-600 disabled:opacity-30 text-white text-xs font-bold rounded-lg transition-colors">+</button>
+                  className="px-2 py-1 bg-amber-500 hover:bg-amber-600 disabled:opacity-30 text-white text-xs font-bold rounded-lg">+</button>
               </div>
             </div>
 
@@ -132,66 +242,68 @@ function GastosSection({ date, gastos, loading, onAdd, onDelete }) {
 // ─── Almacén section ──────────────────────────────────────────────────────────
 
 function AlmacenSection({ items, loading }) {
-  const totalCosto = useMemo(() => items.reduce((s, i) => s + numV(i.costo_salida), 0), [items]);
+  const totalCosto   = useMemo(() => items.reduce((s, i) => s + numV(i.costo_salida), 0), [items]);
   const hasMovements = items.some(i => numV(i.entrada) > 0 || numV(i.salida) > 0);
 
-  if (loading) return <div className="h-20 flex items-center justify-center text-gray-400 text-sm">Cargando almacén…</div>;
+  if (loading) return <div className="h-16 flex items-center justify-center text-gray-400 text-sm">Cargando…</div>;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[700px] text-sm">
-        <thead>
-          <tr className="bg-gray-50 border-b border-gray-100">
-            {['Insumo','Unidad','Inicio','Entrada','Total','Salida','Final','Costo Unit.','Costo Salida'].map(h => (
-              <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-50">
-          {items.length === 0 ? (
-            <tr><td colSpan={9} className="text-center py-10 text-gray-400 text-sm">No hay insumos registrados</td></tr>
-          ) : items.map(item => {
-            const hasMov = numV(item.entrada) > 0 || numV(item.salida) > 0;
-            return (
-              <tr key={item.id} className={`transition-colors ${hasMov ? 'bg-amber-50/40 hover:bg-amber-50/70' : 'hover:bg-gray-50/60'}`}>
-                <td className="px-3 py-2.5 font-medium text-gray-900">{item.name}</td>
-                <td className="px-3 py-2.5 text-gray-500 text-center">{item.unit}</td>
-                <td className="px-3 py-2.5 text-center text-gray-600">{fmtQ(item.inicio)}</td>
-                <td className="px-3 py-2.5 text-center">
-                  {numV(item.entrada) > 0
-                    ? <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full">{fmtQ(item.entrada)}</span>
-                    : <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-3 py-2.5 text-center font-semibold text-gray-700">{fmtQ(numV(item.inicio) + numV(item.entrada))}</td>
-                <td className="px-3 py-2.5 text-center">
-                  {numV(item.salida) > 0
-                    ? <span className="bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full">{fmtQ(item.salida)}</span>
-                    : <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-3 py-2.5 text-center text-gray-700 font-medium">{fmtQ(item.final_qty)}</td>
-                <td className="px-3 py-2.5 text-right text-gray-500">
-                  {numV(item.unit_cost) > 0 ? `$${fmt(item.unit_cost)}` : <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-3 py-2.5 text-right font-bold text-red-600">
-                  {numV(item.costo_salida) > 0 ? `$${fmt(item.costo_salida)}` : <span className="text-gray-300 font-normal">—</span>}
-                </td>
-              </tr>
-            );
-          })}
-          {items.length > 0 && (
-            <tr className="bg-red-50 border-t-2 border-red-200 font-bold">
-              <td colSpan={8} className="px-3 py-2.5 text-right text-red-700">Costo Total de Insumos</td>
-              <td className="px-3 py-2.5 text-right text-red-700">${fmt(totalCosto)}</td>
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[700px] text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              {['Insumo','Ud.','Inicio','Entrada','Total','Salida','Final','Costo/Ud.','Costo Salida'].map(h => (
+                <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+              ))}
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {items.length === 0
+              ? <tr><td colSpan={9} className="text-center py-10 text-gray-400 text-sm">Sin insumos</td></tr>
+              : items.map(item => {
+                  const hasMov = numV(item.entrada) > 0 || numV(item.salida) > 0;
+                  return (
+                    <tr key={item.id} className={`transition-colors ${hasMov ? 'bg-amber-50/40 hover:bg-amber-50' : 'hover:bg-gray-50/50'}`}>
+                      <td className="px-3 py-2 font-medium text-gray-900">{item.name}</td>
+                      <td className="px-3 py-2 text-gray-400 text-center text-xs">{item.unit}</td>
+                      <td className="px-3 py-2 text-center text-gray-600">{fmtQ(item.inicio)}</td>
+                      <td className="px-3 py-2 text-center">
+                        {numV(item.entrada) > 0
+                          ? <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full">{fmtQ(item.entrada)}</span>
+                          : <span className="text-gray-200">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-center font-semibold text-gray-700">{fmtQ(numV(item.inicio)+numV(item.entrada))}</td>
+                      <td className="px-3 py-2 text-center">
+                        {numV(item.salida) > 0
+                          ? <span className="bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full">{fmtQ(item.salida)}</span>
+                          : <span className="text-gray-200">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-center text-gray-700 font-medium">{fmtQ(item.final_qty)}</td>
+                      <td className="px-3 py-2 text-right text-gray-500 text-xs">
+                        {numV(item.unit_cost) > 0 ? `$${fmt(item.unit_cost)}` : <span className="text-gray-200">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right font-bold text-red-600">
+                        {numV(item.costo_salida) > 0 ? `$${fmt(item.costo_salida)}` : <span className="text-gray-200 font-normal">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+            {items.length > 0 && (
+              <tr className="bg-red-50 border-t-2 border-red-200 font-bold">
+                <td colSpan={8} className="px-3 py-2 text-right text-red-700 text-sm">Total Costo Insumos</td>
+                <td className="px-3 py-2 text-right text-red-700">${fmt(totalCosto)}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
       {!hasMovements && items.length > 0 && (
         <p className="text-xs text-gray-400 text-center mt-2">
-          Sin movimientos para esta fecha. Registra consumos en la sección Insumos.
+          Sin movimientos para esta fecha — registra consumos en la sección <strong>Insumos</strong>.
         </p>
       )}
-    </div>
+    </>
   );
 }
 
@@ -199,7 +311,7 @@ function AlmacenSection({ items, loading }) {
 
 export function CuadreDelDia({ batches, onLogout }) {
   const today = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedDate,   setSelectedDate]   = useState(today);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [gastos,         setGastos]         = useState([]);
   const [fondos,         setFondos]         = useState([]);
@@ -210,7 +322,6 @@ export function CuadreDelDia({ batches, onLogout }) {
   const [doingCierre,    setDoingCierre]    = useState(false);
   const toast = useToast();
 
-  // ── Fetch inventory daily ──────────────────────────────────────────────────
   const loadInventory = useCallback(async () => {
     setLoadingInv(true);
     try { setInventoryItems(await api.getInventoryDaily(selectedDate, onLogout)); }
@@ -218,7 +329,6 @@ export function CuadreDelDia({ batches, onLogout }) {
     finally { setLoadingInv(false); }
   }, [selectedDate]);
 
-  // ── Fetch gastos ───────────────────────────────────────────────────────────
   const loadGastos = useCallback(async () => {
     setLoadingGastos(true);
     try { setGastos(await api.getGastos(selectedDate, onLogout)); }
@@ -226,7 +336,6 @@ export function CuadreDelDia({ batches, onLogout }) {
     finally { setLoadingGastos(false); }
   }, [selectedDate]);
 
-  // ── Fetch fondos ───────────────────────────────────────────────────────────
   const loadFondos = useCallback(async () => {
     setLoadingFondos(true);
     try { setFondos(await api.getFondos(onLogout)); }
@@ -234,43 +343,37 @@ export function CuadreDelDia({ batches, onLogout }) {
     finally { setLoadingFondos(false); }
   }, []);
 
-  useEffect(() => {
-    setCierreResult(null);
-    loadInventory();
-    loadGastos();
-  }, [selectedDate]);
-
+  useEffect(() => { setCierreResult(null); loadInventory(); loadGastos(); }, [selectedDate]);
   useEffect(() => { loadFondos(); }, []);
 
-  // ── Gastos handlers ────────────────────────────────────────────────────────
   const handleAddGasto = async (data) => {
-    try {
-      const g = await api.createGasto(data, onLogout);
-      setGastos(prev => [...prev, g]);
-    } catch (err) { toast.error(err.message || 'Error al guardar gasto'); }
+    try { setGastos(prev => [...prev, await api.createGasto(data, onLogout)]); }
+    catch (err) { toast.error(err.message || 'Error al guardar gasto'); }
   };
 
   const handleDeleteGasto = async (id) => {
-    try {
-      await api.deleteGasto(id, onLogout);
-      setGastos(prev => prev.filter(g => g.id !== id));
-    } catch { toast.error('Error al eliminar gasto'); }
+    try { await api.deleteGasto(id, onLogout); setGastos(prev => prev.filter(g => g.id !== id)); }
+    catch { toast.error('Error al eliminar gasto'); }
   };
 
-  // ── Cierre diario ──────────────────────────────────────────────────────────
+  const handleAjustarFondo = async (persona, saldo) => {
+    await api.ajustarFondo(persona, saldo, onLogout);
+    await loadFondos();
+  };
+
   const handleCierre = async () => {
-    if (!window.confirm(`¿Procesar cierre del ${selectedDate}? Los fondos de los socios se actualizarán.`)) return;
+    if (!window.confirm(`¿Procesar cierre del ${selectedDate}?\nLos fondos individuales y el fondo general se actualizarán.`)) return;
     setDoingCierre(true);
     try {
       const result = await api.cierreDiario(selectedDate, onLogout);
       setCierreResult(result);
       setFondos(result.fondos);
-      toast.success('Cierre procesado correctamente');
-    } catch (err) { toast.error(err.message || 'Error al procesar cierre'); }
+      toast.success('Cierre procesado');
+    } catch (err) { toast.error(err.message || 'Error en el cierre'); }
     finally { setDoingCierre(false); }
   };
 
-  // ── Product table (from batches prop) ─────────────────────────────────────
+  // ── Product table ────────────────────────────────────────────────────────
   const productRows = useMemo(() => {
     const dayBatches = batches.filter(b => {
       const raw = new Date(b.date);
@@ -285,8 +388,7 @@ export function CuadreDelDia({ batches, onLogout }) {
       groups[b.breadType].venta   += b.sales.reduce((s, sale) => sale.isGift ? s : s + sale.quantitySold, 0);
     }
     return Object.values(groups).map(g => ({
-      ...g,
-      total:   g.entrada,
+      ...g, total: g.entrada,
       merma:   Math.max(0, g.entrada - g.venta),
       importe: g.venta * g.price,
     }));
@@ -295,16 +397,13 @@ export function CuadreDelDia({ batches, onLogout }) {
   const totalVentas  = useMemo(() => productRows.reduce((s, r) => s + r.importe, 0), [productRows]);
   const totalVendido = useMemo(() => productRows.reduce((s, r) => s + r.venta,   0), [productRows]);
 
-  // ── Financial calculations ─────────────────────────────────────────────────
-  const costoInsumos = useMemo(
-    () => inventoryItems.reduce((s, i) => s + numV(i.costo_salida), 0),
-    [inventoryItems]
-  );
+  // ── P&L ─────────────────────────────────────────────────────────────────
+  const costoInsumos = useMemo(() => inventoryItems.reduce((s, i) => s + numV(i.costo_salida), 0), [inventoryItems]);
 
   const gastosMap = useMemo(() => {
     const m = {};
-    for (const c of GASTO_CATS) m[c.key] = gastos.filter(g => g.category === c.key).reduce((s, g) => s + numV(g.monto), 0);
-    m.total = GASTO_CATS.reduce((s, c) => s + m[c.key], 0);
+    for (const c of GASTO_CATS)
+      m[c.key] = gastos.filter(g => g.category === c.key).reduce((s, g) => s + numV(g.monto), 0);
     return m;
   }, [gastos]);
 
@@ -314,14 +413,20 @@ export function CuadreDelDia({ batches, onLogout }) {
 
   const partnerCalc = useMemo(() => PARTNERS.map(p => ({
     ...p,
-    gastosInd:     gastosMap[p.key] || 0,
-    utilidadFinal: parteBase - (gastosMap[p.key] || 0),
+    gastosInd:      gastosMap[p.key] || 0,
+    utilidadFinal:  parteBase - (gastosMap[p.key] || 0),
   })), [parteBase, gastosMap]);
 
-  const fondoGeneral  = fondos.reduce((s, f) => s + numV(f.saldo), 0);
-  const fondoTotal    = fondos.reduce((s, f) => s + numV(f.saldo), 0);
+  // ── Fondos split ─────────────────────────────────────────────────────────
+  const fondosInd = fondos.filter(f => f.persona !== 'general');
+  const fondoGen  = fondos.find(f => f.persona === 'general');
+  const sumaInd   = fondosInd.reduce((s, f) => s + numV(f.saldo), 0);
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const handleExport = () => exportToCSV({
+    date: selectedDate, productRows, totalVentas, inventoryItems, costoInsumos,
+    gastosMap, utilidadBruta, utilidadNeta, parteBase, partnerCalc, fondos,
+  });
+
   return (
     <div className="space-y-6 animate-fadeInUp">
 
@@ -329,51 +434,56 @@ export function CuadreDelDia({ batches, onLogout }) {
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex-1">
-            <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "'Playfair Display',serif" }}>
-              📋 Cuadre del Día
-            </h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Ventas automáticas · Almacén del inventario · Gastos guardados en servidor
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-sm">
-              <label className="text-gray-500 font-medium whitespace-nowrap">Fecha:</label>
-              <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
-                className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"/>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily:"'Playfair Display',serif" }}>
+                📋 Cuadre del Día
+              </h2>
+              <span className="text-xs bg-indigo-100 text-indigo-700 font-semibold px-2 py-0.5 rounded-full">Solo Admin</span>
             </div>
+            <p className="text-sm text-gray-500 mt-0.5">Ventas automáticas · Almacén del inventario · Gastos guardados en servidor</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"/>
+            <button onClick={handleExport}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm">
+              📊 Excel
+            </button>
             <button onClick={handleCierre} disabled={doingCierre}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm whitespace-nowrap">
-              {doingCierre ? '⏳ Procesando…' : '✅ Cierre del Día'}
+              {doingCierre ? '⏳…' : '✅ Cierre'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── Ventas (products) ── */}
-      <SectionCard
-        title="Productos Vendidos"
-        subtitle="Datos de ventas cargados automáticamente · Regalos excluidos"
-        badge={<span className="text-xs bg-amber-100 text-amber-700 font-semibold px-2.5 py-1 rounded-full">{productRows.length} tipo{productRows.length !== 1 ? 's' : ''}</span>}
-      >
+      {/* ── Productos ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-800">Productos Vendidos</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Datos automáticos · Regalos excluidos</p>
+          </div>
+          {productRows.length > 0 && <span className="text-xs bg-amber-100 text-amber-700 font-semibold px-2.5 py-1 rounded-full">{productRows.length} tipos</span>}
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-sm">
+          <table className="w-full min-w-[580px] text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
                 {['Producto','Entrada','Total','Merma','Venta','Precio','Importe'].map(h => (
-                  <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {productRows.length === 0
-                ? <tr><td colSpan={7} className="text-center py-10 text-gray-400"><div className="text-3xl mb-1">🍞</div>Sin ventas para esta fecha</td></tr>
+                ? <tr><td colSpan={7} className="text-center py-10 text-gray-400"><div className="text-3xl mb-1">🍞</div>Sin ventas</td></tr>
                 : <>
                   {productRows.map(r => (
                     <tr key={r.breadType} className="hover:bg-amber-50/30 transition-colors">
                       <td className="px-3 py-2.5 font-medium text-gray-900">{r.breadType}</td>
                       <td className="px-3 py-2.5 text-center text-gray-600">{r.entrada}</td>
-                      <td className="px-3 py-2.5 text-center font-semibold text-gray-700">{r.total}</td>
+                      <td className="px-3 py-2.5 text-center font-semibold">{r.total}</td>
                       <td className="px-3 py-2.5 text-center">
                         <span className={r.merma > 0 ? 'text-orange-600 font-medium' : 'text-gray-300'}>{r.merma}</span>
                       </td>
@@ -387,7 +497,7 @@ export function CuadreDelDia({ batches, onLogout }) {
                   <tr className="bg-emerald-50 border-t-2 border-emerald-200 font-bold">
                     <td className="px-3 py-2.5 text-gray-800">TOTAL</td>
                     <td colSpan={3}/>
-                    <td className="px-3 py-2.5 text-center text-gray-700">{totalVendido}</td>
+                    <td className="px-3 py-2.5 text-center">{totalVendido}</td>
                     <td/>
                     <td className="px-3 py-2.5 text-right text-emerald-700">${fmt(totalVentas)}</td>
                   </tr>
@@ -396,135 +506,159 @@ export function CuadreDelDia({ batches, onLogout }) {
             </tbody>
           </table>
         </div>
-      </SectionCard>
+      </div>
 
       {/* ── Almacén ── */}
-      <SectionCard
-        title="Almacén — Movimientos del Día"
-        subtitle="Entradas (compras) y consumos registrados en Insumos"
-        badge={
-          costoInsumos > 0
-            ? <span className="text-xs bg-red-100 text-red-700 font-semibold px-2.5 py-1 rounded-full">Costo: ${fmt(costoInsumos)}</span>
-            : null
-        }
-      >
-        <AlmacenSection items={inventoryItems} loading={loadingInv}/>
-      </SectionCard>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-800">Almacén — Movimientos del Día</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Compras y consumos registrados en Insumos para esta fecha</p>
+          </div>
+          {costoInsumos > 0 && <span className="text-xs bg-red-100 text-red-700 font-semibold px-2.5 py-1 rounded-full">Costo: ${fmt(costoInsumos)}</span>}
+        </div>
+        <div className="p-5">
+          <AlmacenSection items={inventoryItems} loading={loadingInv}/>
+        </div>
+      </div>
 
       {/* ── Gastos ── */}
-      <SectionCard
-        title="Gastos"
-        subtitle="Guardados en el servidor · Haz clic en × para eliminar una fila"
-      >
-        <GastosSection
-          date={selectedDate}
-          gastos={gastos}
-          loading={loadingGastos}
-          onAdd={handleAddGasto}
-          onDelete={handleDeleteGasto}
-        />
-      </SectionCard>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h3 className="font-semibold text-gray-800 mb-1">Gastos</h3>
+        <p className="text-xs text-gray-400 mb-4">Guardados en servidor · Click ×  para eliminar · Enter para agregar rápido</p>
+        <GastosSection date={selectedDate} gastos={gastos} loading={loadingGastos}
+          onAdd={handleAddGasto} onDelete={handleDeleteGasto}/>
+      </div>
 
-      {/* ── P&L Summary ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Total Ventas"      value={`$${fmt(totalVentas)}`}    sub={`${totalVendido} uds.`}      color="green"/>
-        <KpiCard label="Costo Insumos"     value={`$${fmt(costoInsumos)}`}   sub="Consumo del día"             color="red"/>
-        <KpiCard label="Utilidad Bruta"    value={`$${fmt(utilidadBruta)}`}  sub="Ventas − Insumos"            color={utilidadBruta >= 0 ? 'blue' : 'red'}/>
-        <KpiCard label="Gastos Generales"  value={`$${fmt(gastosMap.generales)}`} sub="Operativos"             color="orange"/>
+      {/* ── P&L ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h3 className="font-semibold text-gray-800 mb-4">Resultado del Día</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
+          {[
+            { l: 'Ventas',         v: totalVentas,          c: 'text-emerald-700 bg-emerald-50 border-emerald-100', sub: `${totalVendido} uds.` },
+            { l: 'Costo Insumos',  v: costoInsumos,         c: 'text-red-700 bg-red-50 border-red-100',            sub: 'Consumo × precio prom.' },
+            { l: 'Utilidad Bruta', v: utilidadBruta,        c: `${utilidadBruta>=0?'text-blue-700 bg-blue-50 border-blue-100':'text-orange-700 bg-orange-50 border-orange-100'}`, sub: 'Ventas − Insumos' },
+            { l: 'G. Generales',   v: gastosMap.generales,  c: 'text-orange-700 bg-orange-50 border-orange-100',   sub: 'Salarios, guardia…' },
+            { l: 'Utilidad Neta',  v: utilidadNeta,         c: `${utilidadNeta>=0?'text-indigo-700 bg-indigo-50 border-indigo-100':'text-red-700 bg-red-50 border-red-100'}`, sub: 'U.Bruta − G.Generales' },
+          ].map(({ l, v, c, sub }) => (
+            <div key={l} className={`border rounded-2xl p-3 ${c}`}>
+              <p className="text-xs font-semibold uppercase tracking-wider opacity-70 mb-1">{l}</p>
+              <p className="text-lg font-extrabold">${fmt(v)}</p>
+              <p className="text-xs opacity-60 mt-0.5">{sub}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── Distribución ── */}
-      <SectionCard title="Distribución de Utilidades" subtitle="Utilidad Neta ÷ 3 socios, menos gastos individuales">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <h3 className="font-semibold text-gray-800 mb-1">Distribución de Utilidades</h3>
+        <p className="text-xs text-gray-400 mb-4">Utilidad Neta ÷ 3 socios, luego se restan los gastos individuales de cada uno</p>
         <div className="grid md:grid-cols-3 gap-4">
           {partnerCalc.map(p => (
-            <div key={p.key} className="border border-gray-100 rounded-xl p-4 space-y-2">
-              <h4 className="font-bold text-gray-800 text-base">{p.label}</h4>
-              <div className="space-y-1 text-sm">
+            <div key={p.key} className="border border-gray-100 rounded-xl p-4">
+              <h4 className="font-bold text-gray-800 mb-3">{p.label}</h4>
+              <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between text-gray-500">
-                  <span>Parte base (UN÷3)</span>
+                  <span>Parte (UN÷3)</span>
                   <span className="font-medium text-gray-700">${fmt(parteBase)}</span>
                 </div>
                 <div className="flex justify-between text-gray-500">
-                  <span>Gastos individuales</span>
+                  <span>Gastos propios</span>
                   <span className="font-medium text-red-600">−${fmt(p.gastosInd)}</span>
                 </div>
-                <div className="flex justify-between pt-1 border-t border-gray-100 font-bold">
+                <div className="flex justify-between pt-2 border-t border-gray-100 font-bold">
                   <span className="text-gray-700">Utilidad Final</span>
-                  <span className={p.utilidadFinal >= 0 ? 'text-emerald-600' : 'text-red-600'}>${fmt(p.utilidadFinal)}</span>
+                  <span className={p.utilidadFinal >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                    ${fmt(p.utilidadFinal)}
+                  </span>
                 </div>
               </div>
             </div>
           ))}
         </div>
-        <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-3 text-center">
-          <div>
-            <p className="text-xs text-gray-400">Utilidad Neta</p>
-            <p className={`font-bold text-base ${utilidadNeta >= 0 ? 'text-blue-700' : 'text-red-600'}`}>${fmt(utilidadNeta)}</p>
-            <p className="text-xs text-gray-400">Bruta − G.Generales</p>
+      </div>
+
+      {/* ── Fondos ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+        <div>
+          <h3 className="font-semibold text-gray-800">Fondos</h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Los <strong>fondos individuales</strong> acumulan las utilidades de cada socio.
+            El <strong>Fondo General</strong> es la posición de caja del negocio (ventas − gastos del fondo).
+            Son conceptos separados.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* Fondos individuales */}
+          <div className="border border-gray-100 rounded-xl p-4">
+            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Fondos Individuales — Utilidades acumuladas</h4>
+            <div className="space-y-2">
+              {fondosInd.map(f => (
+                <div key={f.persona} className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-gray-700 capitalize">{f.persona}</span>
+                  <span className={`font-bold text-base ${numV(f.saldo) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    ${fmt(f.saldo)}
+                  </span>
+                </div>
+              ))}
+              <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                <span className="text-xs text-gray-400">Suma</span>
+                <span className="text-sm font-bold text-gray-600">${fmt(sumaInd)}</span>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-gray-400">Parte por socio</p>
-            <p className={`font-bold text-base ${parteBase >= 0 ? 'text-blue-700' : 'text-red-600'}`}>${fmt(parteBase)}</p>
-            <p className="text-xs text-gray-400">UN ÷ 3</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">Gastos del Fondo</p>
-            <p className="font-bold text-base text-gray-500">${fmt(gastosMap.fondo || 0)}</p>
-            <p className="text-xs text-gray-400">No afectan utilidad</p>
+
+          {/* Fondo general */}
+          <div className="border border-indigo-100 bg-indigo-50/30 rounded-xl p-4">
+            <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">Fondo General — Caja del negocio</h4>
+            <p className="text-[10px] text-indigo-400 mb-3">Se actualiza con: Fondo anterior + Ventas − Gastos del Fondo</p>
+            {fondoGen
+              ? <p className={`text-3xl font-extrabold ${numV(fondoGen.saldo) >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>
+                  ${fmt(fondoGen.saldo)}
+                </p>
+              : <p className="text-gray-400 text-sm">Sin datos</p>
+            }
+            {fondoGen && (
+              <div className="mt-3 pt-3 border-t border-indigo-100">
+                <div className="flex justify-between text-xs">
+                  <span className="text-indigo-400">Diferencia con suma individual</span>
+                  <span className={`font-bold ${Math.abs(numV(fondoGen.saldo) - sumaInd) < 1 ? 'text-emerald-600' : 'text-orange-500'}`}>
+                    {Math.abs(numV(fondoGen.saldo) - sumaInd) < 1 ? '✓ Cuadra' : `$${fmt(Math.abs(numV(fondoGen.saldo) - sumaInd))} de diferencia`}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </SectionCard>
 
-      {/* ── Fondos acumulados ── */}
-      <SectionCard
-        title="Fondos Acumulados"
-        subtitle={loadingFondos ? 'Cargando…' : `Fondo general: $${fmt(fondoTotal)}`}
-      >
-        {fondos.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-4">Sin datos de fondos</p>
-        ) : (
-          <div className="grid md:grid-cols-3 gap-4">
-            {fondos.map(f => (
-              <div key={f.persona} className="border border-gray-100 rounded-xl p-4 text-center">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 capitalize">{f.persona}</p>
-                <p className={`text-2xl font-extrabold ${numV(f.saldo) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  ${fmt(f.saldo)}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-        {/* Validación */}
-        {fondos.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm">
-            <span className="text-gray-500">Suma fondos individuales</span>
-            <span className="font-bold text-gray-800">${fmt(fondoGeneral)}</span>
-          </div>
-        )}
-      </SectionCard>
+        {/* Setup inicial */}
+        <FondoSetup fondos={fondos} onAjustar={handleAjustarFondo}/>
+      </div>
 
-      {/* ── Resultado del último cierre ── */}
+      {/* ── Resultado del cierre ── */}
       {cierreResult && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 space-y-3">
           <h3 className="font-bold text-indigo-800">✅ Cierre procesado — {cierreResult.date}</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             {[
-              ['Ventas',        fmt(cierreResult.totalVentas)],
-              ['Costo Insumos', fmt(cierreResult.totalCostoInsumos)],
-              ['G. Generales',  fmt(cierreResult.gastosGenerales)],
-              ['Util. Neta',    fmt(cierreResult.utilidadNeta)],
+              ['Ventas',       fmt(cierreResult.totalVentas)],
+              ['C. Insumos',   fmt(cierreResult.totalCostoInsumos)],
+              ['G. Generales', fmt(cierreResult.gastosGenerales)],
+              ['Util. Neta',   fmt(cierreResult.utilidadNeta)],
             ].map(([l,v]) => (
               <div key={l} className="bg-white rounded-xl px-3 py-2 text-center border border-indigo-100">
-                <p className="text-xs text-indigo-500">{l}</p>
+                <p className="text-xs text-indigo-400">{l}</p>
                 <p className="font-bold text-indigo-800">${v}</p>
               </div>
             ))}
           </div>
-          <div className="grid md:grid-cols-3 gap-3 text-sm">
+          <div className="grid md:grid-cols-3 gap-3">
             {cierreResult.movements.map(m => (
               <div key={m.persona} className="bg-white rounded-xl px-3 py-2 border border-indigo-100">
                 <p className="text-xs font-bold text-indigo-600 uppercase">{m.persona}</p>
-                <p className="text-xs text-gray-500">Parte: ${fmt(m.parteBase)} · G.Ind: ${fmt(m.gastosInd)}</p>
+                <p className="text-xs text-gray-500">Parte ${fmt(m.parteBase)} · G.Ind ${fmt(m.gastosInd)}</p>
                 <p className={`font-bold ${m.utilidadFinal >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   Final: ${fmt(m.utilidadFinal)}
                 </p>
