@@ -69,4 +69,9 @@ export const api = {
   createPreset:  (data, onAuthError)      => _fetch('/api/presets', { method: 'POST', body: JSON.stringify(data) }, onAuthError),
   updatePreset:  (id, data, onAuthError)  => _fetch(`/api/presets/${id}`, { method: 'PUT', body: JSON.stringify(data) }, onAuthError),
   deletePreset:  (id, onAuthError)        => _fetch(`/api/presets/${id}`, { method: 'DELETE' }, onAuthError),
+
+  // Offline Sync
+  getSnapshot:      (onAuthError)              => _fetch('/api/sync/snapshot', {}, onAuthError),
+  getChanges:       (since, onAuthError)       => _fetch(`/api/sync/changes?since=${encodeURIComponent(since)}`, {}, onAuthError),
+  syncOperations:   (operations, onAuthError)  => _fetch('/api/sync', { method: 'POST', body: JSON.stringify({ operations }) }, onAuthError),
 };

@@ -24,11 +24,20 @@ const TABS = [
 // How many date groups to show initially
 const GROUPS_PER_PAGE = 7;
 
-function ConnectionBadge({ status }) {
+function ConnectionBadge({ status, isOnline }) {
+  // Si el dispositivo no tiene internet, mostramos "Offline" sin importar el socket
+  if (!isOnline) {
+    return (
+      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-orange-50 rounded-xl border border-orange-200" title="Sin internet — trabajando en modo offline">
+        <span className="w-2 h-2 rounded-full flex-shrink-0 bg-orange-500" />
+        <span className="text-xs font-medium text-orange-600">Offline</span>
+      </div>
+    );
+  }
   const cfg = {
-    connected:    { dot: 'bg-emerald-500',                  text: 'En línea',       label: 'Conectado al servidor' },
-    reconnecting: { dot: 'bg-amber-400 animate-pulse',      text: 'Reconectando…',  label: 'Intentando reconectar' },
-    disconnected: { dot: 'bg-red-500',                      text: 'Sin conexión',   label: 'Sin conexión al servidor' },
+    connected:    { dot: 'bg-emerald-500',             text: 'En línea',      label: 'Conectado al servidor' },
+    reconnecting: { dot: 'bg-amber-400 animate-pulse', text: 'Reconectando…', label: 'Intentando reconectar' },
+    disconnected: { dot: 'bg-red-500',                 text: 'Sin conexión',  label: 'Sin conexión al servidor' },
   };
   const c = cfg[status] || cfg.disconnected;
   return (
@@ -38,6 +47,24 @@ function ConnectionBadge({ status }) {
         {c.text}
       </span>
     </div>
+  );
+}
+
+function SyncButton({ pendingOps, isSyncing, isOnline, onSync }) {
+  if (!pendingOps) return null;
+  return (
+    <button
+      onClick={onSync}
+      disabled={isSyncing || !isOnline}
+      title={isOnline ? `Sincronizar ${pendingOps} operación${pendingOps > 1 ? 'es' : ''} pendiente${pendingOps > 1 ? 's' : ''}` : 'Sin internet — se sincronizará al reconectar'}
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-medium transition-colors
+        ${isOnline && !isSyncing
+          ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 cursor-pointer'
+          : 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'}`}
+    >
+      <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
+      <span>{isSyncing ? 'Sincronizando…' : `${pendingOps} pendiente${pendingOps > 1 ? 's' : ''}`}</span>
+    </button>
   );
 }
 
@@ -53,6 +80,10 @@ export function Dashboard({
   handleDeleteSale,
   getPermissions,
   socketStatus = 'disconnected',
+  isOnline = true,
+  pendingOps = 0,
+  isSyncing = false,
+  onSync,
 }) {
   const [activeTab, setActiveTab]     = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,8 +177,8 @@ export function Dashboard({
               <span className="font-display font-semibold text-gray-900 hidden sm:block">Panadería Digital</span>
             </div>
             <div className="flex items-center gap-2">
-              {/* Connection status */}
-              <ConnectionBadge status={socketStatus} />
+              <SyncButton pendingOps={pendingOps} isSyncing={isSyncing} isOnline={isOnline} onSync={onSync} />
+              <ConnectionBadge status={socketStatus} isOnline={isOnline} />
 
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-xl">
                 <div className="w-6 h-6 rounded-full bg-amber-200 flex items-center justify-center text-xs font-bold text-amber-800">
@@ -164,19 +195,28 @@ export function Dashboard({
         </div>
       </header>
 
-      {/* Offline banner */}
-      {socketStatus === 'disconnected' && (
+      {/* Banners de estado */}
+      {!isOnline && (
+        <div className="bg-orange-50 border-b border-orange-200 px-4 py-2.5 text-center">
+          <span className="text-xs text-orange-800 font-medium">
+            📵 Sin internet — trabajando en modo offline. Tus cambios se guardan localmente
+            {pendingOps > 0 && ` (${pendingOps} pendiente${pendingOps > 1 ? 's' : ''})`}
+            {' '}y se sincronizarán automáticamente al reconectar.
+          </span>
+        </div>
+      )}
+      {isOnline && socketStatus === 'reconnecting' && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
+          <span className="text-xs text-amber-700 font-medium">
+            🔄 Reconectando al servidor… El backend puede estar despertando (hasta 30 seg en plan gratuito).
+          </span>
+        </div>
+      )}
+      {isOnline && socketStatus === 'disconnected' && (
         <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-center">
           <span className="text-xs text-red-700 font-medium">
             ⚠️ Sin conexión al servidor — los cambios de otros usuarios no se verán en tiempo real.
             {' '}<button onClick={() => window.location.reload()} className="underline hover:text-red-900">Recargar</button>
-          </span>
-        </div>
-      )}
-      {socketStatus === 'reconnecting' && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-center">
-          <span className="text-xs text-amber-700 font-medium">
-            🔄 Reconectando al servidor… El backend puede estar despertando (hasta 30 seg en plan gratuito).
           </span>
         </div>
       )}
