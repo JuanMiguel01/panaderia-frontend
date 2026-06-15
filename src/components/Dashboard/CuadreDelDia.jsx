@@ -347,7 +347,7 @@ export function CuadreDelDia({ batches, onLogout }) {
   useEffect(() => { loadFondos(); }, []);
 
   const handleAddGasto = async (data) => {
-    try { setGastos(prev => [...prev, await api.createGasto(data, onLogout)]); }
+    try { const gasto = await api.createGasto(data, onLogout); setGastos(prev => [...prev, gasto]); }
     catch (err) { toast.error(err.message || 'Error al guardar gasto'); }
   };
 
