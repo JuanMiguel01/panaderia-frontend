@@ -71,6 +71,7 @@ function SyncButton({ pendingOps, isSyncing, isOnline, onSync }) {
 export function Dashboard({
   user,
   batches,
+  presets = [],
   isLoadingBatches,
   onLogout,
   handleCreateBatch,
@@ -306,7 +307,7 @@ export function Dashboard({
 
             {/* New batch form */}
             {permissions.canManageStock && (
-              <AddBatchForm onCreateBatch={handleCreateBatch} onLogout={onLogout} />
+              <AddBatchForm onCreateBatch={handleCreateBatch} presets={presets} />
             )}
 
             {/* Batch list */}

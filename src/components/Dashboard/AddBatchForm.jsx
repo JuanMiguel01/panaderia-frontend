@@ -1,6 +1,5 @@
 // src/components/Dashboard/AddBatchForm.jsx
-import React, { useState, useEffect } from 'react';
-import { api } from '../../services/api';
+import React, { useState } from 'react';
 
 const todayISO = () => new Date().toISOString().split('T')[0];
 
@@ -13,24 +12,15 @@ const DEFAULT_PRESETS = [
   { id: 6,  name: 'Base de Pizzas',  price: 290, emoji: '🍕' },
 ];
 
-export function AddBatchForm({ onCreateBatch, onLogout }) {
+// presets viene del snapshot cacheado — siempre disponible aunque no haya internet
+export function AddBatchForm({ onCreateBatch, presets: propPresets = [] }) {
   const [isOpen, setIsOpen]         = useState(false);
   const [date, setDate]             = useState(todayISO());
   const [quantities, setQuantities] = useState({});
   const [customRows, setCustomRows] = useState([]);
   const [isLoading, setIsLoading]   = useState(false);
-  const [presets, setPresets]       = useState([]);
-  const [presetsLoading, setPresetsLoading] = useState(false);
 
-  // Load presets from API when form opens
-  useEffect(() => {
-    if (!isOpen) return;
-    setPresetsLoading(true);
-    api.getPresets(onLogout)
-      .then(data => setPresets(data.length > 0 ? data : DEFAULT_PRESETS))
-      .catch(() => setPresets(DEFAULT_PRESETS))
-      .finally(() => setPresetsLoading(false));
-  }, [isOpen]);
+  const presets = propPresets.length > 0 ? propPresets : DEFAULT_PRESETS;
 
   // ── Qty helpers ───────────────────────────────────────
   const setQty = (id, val) => {
@@ -138,14 +128,7 @@ export function AddBatchForm({ onCreateBatch, onLogout }) {
               Seleccioná e ingresá cantidades
             </p>
 
-            {presetsLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="animate-pulse rounded-xl border-2 border-gray-100 bg-gray-50 p-3 h-28" />
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
                 {presets.map(preset => {
                   const qty    = quantities[preset.id] || '';
                   const active = qty && Number(qty) > 0;
@@ -160,7 +143,6 @@ export function AddBatchForm({ onCreateBatch, onLogout }) {
                   );
                 })}
               </div>
-            )}
           </div>
 
           {/* Custom rows */}

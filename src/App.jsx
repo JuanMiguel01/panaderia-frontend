@@ -1,7 +1,7 @@
 // src/App.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { api } from './services/api';
+import { api, isNetworkError } from './services/api';
 import { offlineQueue } from './services/offlineQueue';
 import { offlineStorage } from './services/offlineStorage';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -21,6 +21,7 @@ function AppContent() {
   const [user, setUser]               = useState(null);
   const [token, setToken]             = useState(null);
   const [batches, setBatches]         = useState([]);
+  const [presets, setPresets]         = useState([]);
   const [isLoading, setIsLoading]     = useState(true);
   const [socketStatus, setSocketStatus] = useState('disconnected');
   const [pendingOps, setPendingOps]   = useState(0);
@@ -63,9 +64,8 @@ function AppContent() {
   const loadData = useCallback(async () => {
     // 1. Mostrar caché inmediatamente (fast path)
     const cached = offlineStorage.getSnapshot();
-    if (cached?.batches?.length) {
-      setBatches(cached.batches);
-    }
+    if (cached?.batches?.length) setBatches(cached.batches);
+    if (cached?.presets?.length) setPresets(cached.presets);
 
     if (!isOnline) return;
 
@@ -85,6 +85,7 @@ function AppContent() {
             return merged;
           });
         }
+        if (changes.presets?.length) setPresets(changes.presets);
         offlineStorage.saveSnapshot({
           ...(offlineStorage.getSnapshot() || {}),
           syncedAt: changes.syncedAt,
@@ -94,6 +95,7 @@ function AppContent() {
         // Snapshot completo
         const snapshot = await api.getSnapshot(handleLogout);
         setBatches(snapshot.batches || []);
+        if (snapshot.presets?.length) setPresets(snapshot.presets);
         offlineStorage.saveSnapshot(snapshot);
       }
     } catch {
@@ -271,162 +273,127 @@ function AppContent() {
 
   // ── CRUD: crear lote ────────────────────────────────────────
   const handleCreateBatch = useCallback(async (data) => {
-    if (!isOnline) {
-      const clientId = genId();
+    const saveBatchOffline = () => {
+      const clientId  = genId();
       const tempBatch = {
-        id: clientId,
-        breadType:    data.breadType,
-        quantityMade: data.quantityMade,
-        price:        data.price,
-        date:         data.date || new Date().toISOString().split('T')[0],
-        createdBy:    userRef.current?.email,
-        sales:        [],
-        _offline:     true,
+        id: clientId, breadType: data.breadType, quantityMade: data.quantityMade,
+        price: data.price, date: data.date || new Date().toISOString().split('T')[0],
+        createdBy: userRef.current?.email, sales: [], _offline: true,
       };
-      setBatches(prev => {
-        const next = [tempBatch, ...prev];
-        offlineStorage.updateBatches(next);
-        return next;
-      });
+      setBatches(prev => { const next = [tempBatch, ...prev]; offlineStorage.updateBatches(next); return next; });
       offlineQueue.add({ id: clientId, type: 'batch:create', payload: data, timestamp: new Date().toISOString() });
       refreshPendingCount();
       toast.info('Sin conexión — lote guardado para sincronizar.');
-      return;
-    }
+    };
+
+    if (!isOnline) { saveBatchOffline(); return; }
     try {
       await api.createBatch(data, handleLogout);
       toast.success('¡Lote creado correctamente!');
     } catch (err) {
-      toast.error(err.message || 'Error al crear lote.');
-      throw err;
+      if (isNetworkError(err)) { saveBatchOffline(); }
+      else { toast.error(err.message || 'Error al crear lote.'); throw err; }
     }
   }, [isOnline, handleLogout, refreshPendingCount]);
 
   // ── CRUD: eliminar lote ─────────────────────────────────────
   const handleDeleteBatch = useCallback(async (batchId) => {
-    if (!isOnline) {
-      // Si era un lote temporal (creado offline), eliminar de la cola también
+    const deleteBatchOffline = () => {
       const isTemp = typeof batchId === 'string' && batchId.includes('-');
-      if (isTemp) {
-        offlineQueue.remove(batchId);
-      } else {
-        offlineQueue.add({ id: genId(), type: 'batch:delete', payload: { batchId }, timestamp: new Date().toISOString() });
-      }
-      setBatches(prev => {
-        const next = prev.filter(b => b.id !== batchId);
-        offlineStorage.updateBatches(next);
-        return next;
-      });
+      if (isTemp) { offlineQueue.remove(batchId); }
+      else { offlineQueue.add({ id: genId(), type: 'batch:delete', payload: { batchId }, timestamp: new Date().toISOString() }); }
+      setBatches(prev => { const next = prev.filter(b => b.id !== batchId); offlineStorage.updateBatches(next); return next; });
       refreshPendingCount();
       toast.info('Sin conexión — eliminación guardada para sincronizar.');
-      return;
-    }
+    };
+
+    if (!isOnline) { deleteBatchOffline(); return; }
     try {
       await api.deleteBatch(batchId, handleLogout);
       toast.success('Lote eliminado.');
     } catch (err) {
-      toast.error(err.message || 'Error al eliminar lote.');
+      if (isNetworkError(err)) { deleteBatchOffline(); }
+      else { toast.error(err.message || 'Error al eliminar lote.'); }
     }
   }, [isOnline, handleLogout, refreshPendingCount]);
 
   // ── CRUD: crear venta ───────────────────────────────────────
   const handleCreateSale = useCallback(async (batchId, data) => {
-    if (!isOnline) {
-      const saleId = genId();
+    const saveSaleOffline = () => {
+      const saleId   = genId();
       const tempSale = {
-        id:           saleId,
-        personName:   data.personName,
-        quantitySold: data.quantitySold,
-        isPaid:       false,
-        isDelivered:  false,
-        isGift:       data.isGift || false,
-        createdAt:    new Date().toISOString(),
-        _offline:     true,
+        id: saleId, personName: data.personName, quantitySold: data.quantitySold,
+        isPaid: false, isDelivered: false, isGift: data.isGift || false,
+        createdAt: new Date().toISOString(), _offline: true,
       };
       setBatches(prev => {
-        const next = prev.map(b =>
-          b.id === batchId ? { ...b, sales: [...b.sales, tempSale] } : b
-        );
+        const next = prev.map(b => b.id === batchId ? { ...b, sales: [...b.sales, tempSale] } : b);
         offlineStorage.updateBatches(next);
         return next;
       });
-      offlineQueue.add({
-        id: saleId, type: 'sale:create',
-        payload: { batchId, ...data },
-        timestamp: new Date().toISOString(),
-      });
+      offlineQueue.add({ id: saleId, type: 'sale:create', payload: { batchId, ...data }, timestamp: new Date().toISOString() });
       refreshPendingCount();
       toast.info('Sin conexión — venta guardada para sincronizar.');
-      return;
-    }
+    };
+
+    if (!isOnline) { saveSaleOffline(); return; }
     try {
       await api.createSale(batchId, data, handleLogout);
       toast.success('Venta registrada.');
     } catch (err) {
-      toast.error(err.message || 'Error al registrar venta.');
+      if (isNetworkError(err)) { saveSaleOffline(); }
+      else { toast.error(err.message || 'Error al registrar venta.'); }
     }
   }, [isOnline, handleLogout, refreshPendingCount]);
 
   // ── CRUD: actualizar venta ──────────────────────────────────
   const handleUpdateSale = useCallback(async (batchId, saleId, data) => {
-    if (!isOnline) {
+    const updateSaleOffline = () => {
       setBatches(prev => {
         const next = prev.map(b =>
-          b.id === batchId
-            ? { ...b, sales: b.sales.map(s => s.id === saleId ? { ...s, ...data } : s) }
-            : b
+          b.id === batchId ? { ...b, sales: b.sales.map(s => s.id === saleId ? { ...s, ...data } : s) } : b
         );
         offlineStorage.updateBatches(next);
         return next;
       });
-      // Solo encolar si no es ya una venta temporal (si lo es, la cola de create ya la tiene)
       const isTemp = typeof saleId === 'string' && saleId.includes('-');
       if (!isTemp) {
-        offlineQueue.add({
-          id: genId(), type: 'sale:update',
-          payload: { saleId, batchId, ...data },
-          timestamp: new Date().toISOString(),
-        });
+        offlineQueue.add({ id: genId(), type: 'sale:update', payload: { saleId, batchId, ...data }, timestamp: new Date().toISOString() });
         refreshPendingCount();
       }
-      return;
-    }
+    };
+
+    if (!isOnline) { updateSaleOffline(); return; }
     try {
       await api.updateSale(batchId, saleId, data, handleLogout);
     } catch (err) {
-      toast.error(err.message || 'Error al actualizar venta.');
+      if (isNetworkError(err)) { updateSaleOffline(); }
+      else { toast.error(err.message || 'Error al actualizar venta.'); }
     }
   }, [isOnline, handleLogout, refreshPendingCount]);
 
   // ── CRUD: eliminar venta ────────────────────────────────────
   const handleDeleteSale = useCallback(async (batchId, saleId) => {
-    if (!isOnline) {
+    const deleteSaleOffline = () => {
       const isTemp = typeof saleId === 'string' && saleId.includes('-');
-      if (isTemp) {
-        offlineQueue.remove(saleId);
-      } else {
-        offlineQueue.add({
-          id: genId(), type: 'sale:delete',
-          payload: { saleId, batchId },
-          timestamp: new Date().toISOString(),
-        });
-      }
+      if (isTemp) { offlineQueue.remove(saleId); }
+      else { offlineQueue.add({ id: genId(), type: 'sale:delete', payload: { saleId, batchId }, timestamp: new Date().toISOString() }); }
       setBatches(prev => {
-        const next = prev.map(b =>
-          b.id === batchId ? { ...b, sales: b.sales.filter(s => s.id !== saleId) } : b
-        );
+        const next = prev.map(b => b.id === batchId ? { ...b, sales: b.sales.filter(s => s.id !== saleId) } : b);
         offlineStorage.updateBatches(next);
         return next;
       });
       refreshPendingCount();
       toast.info('Sin conexión — eliminación guardada para sincronizar.');
-      return;
-    }
+    };
+
+    if (!isOnline) { deleteSaleOffline(); return; }
     try {
       await api.deleteSale(batchId, saleId, handleLogout);
       toast.success('Venta eliminada.');
     } catch (err) {
-      toast.error(err.message || 'Error al eliminar venta.');
+      if (isNetworkError(err)) { deleteSaleOffline(); }
+      else { toast.error(err.message || 'Error al eliminar venta.'); }
     }
   }, [isOnline, handleLogout, refreshPendingCount]);
 
@@ -451,6 +418,7 @@ function AppContent() {
     <Dashboard
       user={user}
       batches={batches}
+      presets={presets}
       socketStatus={socketStatus}
       isOnline={isOnline}
       pendingOps={pendingOps}

@@ -2,6 +2,11 @@
 
 const API_URL = 'https://panaderia-backend-uy2k.onrender.com';
 
+// TypeError = fetch no pudo hacer la petición (sin internet, ERR_NETWORK_CHANGED, etc.)
+export function isNetworkError(err) {
+  return err instanceof TypeError;
+}
+
 async function _fetch(endpoint, options = {}, onAuthError) {
   options.headers = { 'Content-Type': 'application/json', ...options.headers };
   const currentToken = localStorage.getItem('jwt_token');
