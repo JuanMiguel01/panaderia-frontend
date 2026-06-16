@@ -280,7 +280,11 @@ function AppContent() {
         price: data.price, date: data.date || new Date().toISOString().split('T')[0],
         createdBy: userRef.current?.email, sales: [], _offline: true,
       };
-      setBatches(prev => { const next = [tempBatch, ...prev]; offlineStorage.updateBatches(next); return next; });
+      setBatches(prev => {
+        const next = [tempBatch, ...prev].sort((a, b) => new Date(b.date) - new Date(a.date) || String(b.id).localeCompare(String(a.id)));
+        offlineStorage.updateBatches(next);
+        return next;
+      });
       offlineQueue.add({ id: clientId, type: 'batch:create', payload: data, timestamp: new Date().toISOString() });
       refreshPendingCount();
       toast.info('Sin conexión — lote guardado para sincronizar.');
@@ -288,7 +292,16 @@ function AppContent() {
 
     if (!isOnline) { saveBatchOffline(); return; }
     try {
-      await api.createBatch(data, handleLogout);
+      const b = await api.createBatch(data, handleLogout);
+      const newBatch = {
+        id: b.id, breadType: b.bread_type, quantityMade: b.quantity_made,
+        price: b.price, date: b.date, createdBy: b.created_by_email, sales: [],
+      };
+      setBatches(prev => {
+        const next = [newBatch, ...prev].sort((a, bk) => new Date(bk.date) - new Date(a.date) || bk.id - a.id);
+        offlineStorage.updateBatches(next);
+        return next;
+      });
       toast.success('¡Lote creado correctamente!');
     } catch (err) {
       if (isNetworkError(err)) { saveBatchOffline(); }
@@ -310,6 +323,7 @@ function AppContent() {
     if (!isOnline) { deleteBatchOffline(); return; }
     try {
       await api.deleteBatch(batchId, handleLogout);
+      setBatches(prev => { const next = prev.filter(b => b.id !== batchId); offlineStorage.updateBatches(next); return next; });
       toast.success('Lote eliminado.');
     } catch (err) {
       if (isNetworkError(err)) { deleteBatchOffline(); }
@@ -319,8 +333,7 @@ function AppContent() {
 
   // ── CRUD: crear venta ───────────────────────────────────────
   const handleCreateSale = useCallback(async (batchId, data) => {
-    const saveSaleOffline = () => {
-      const saleId   = genId();
+    const saveSaleOffline = (saleId = genId()) => {
       const tempSale = {
         id: saleId, personName: data.personName, quantitySold: data.quantitySold,
         isPaid: false, isDelivered: false, isGift: data.isGift || false,
@@ -338,7 +351,16 @@ function AppContent() {
 
     if (!isOnline) { saveSaleOffline(); return; }
     try {
-      await api.createSale(batchId, data, handleLogout);
+      const s = await api.createSale(batchId, data, handleLogout);
+      const newSale = {
+        id: s.id, personName: s.person_name, quantitySold: s.quantity_sold,
+        isPaid: s.is_paid, isDelivered: s.is_delivered, isGift: s.is_gift, createdAt: s.created_at,
+      };
+      setBatches(prev => {
+        const next = prev.map(b => b.id === batchId ? { ...b, sales: [...b.sales, newSale] } : b);
+        offlineStorage.updateBatches(next);
+        return next;
+      });
       toast.success('Venta registrada.');
     } catch (err) {
       if (isNetworkError(err)) { saveSaleOffline(); }
@@ -348,27 +370,35 @@ function AppContent() {
 
   // ── CRUD: actualizar venta ──────────────────────────────────
   const handleUpdateSale = useCallback(async (batchId, saleId, data) => {
-    const updateSaleOffline = () => {
-      setBatches(prev => {
-        const next = prev.map(b =>
-          b.id === batchId ? { ...b, sales: b.sales.map(s => s.id === saleId ? { ...s, ...data } : s) } : b
-        );
-        offlineStorage.updateBatches(next);
-        return next;
-      });
-      const isTemp = typeof saleId === 'string' && saleId.includes('-');
+    // Optimistic: actualizar estado inmediatamente (no esperar socket)
+    setBatches(prev => {
+      const next = prev.map(b =>
+        b.id === batchId ? { ...b, sales: b.sales.map(s => s.id === saleId ? { ...s, ...data } : s) } : b
+      );
+      offlineStorage.updateBatches(next);
+      return next;
+    });
+
+    const isTemp = typeof saleId === 'string' && saleId.includes('-');
+
+    if (!isOnline) {
       if (!isTemp) {
         offlineQueue.add({ id: genId(), type: 'sale:update', payload: { saleId, batchId, ...data }, timestamp: new Date().toISOString() });
         refreshPendingCount();
       }
-    };
-
-    if (!isOnline) { updateSaleOffline(); return; }
+      return;
+    }
     try {
       await api.updateSale(batchId, saleId, data, handleLogout);
     } catch (err) {
-      if (isNetworkError(err)) { updateSaleOffline(); }
-      else { toast.error(err.message || 'Error al actualizar venta.'); }
+      if (isNetworkError(err)) {
+        if (!isTemp) {
+          offlineQueue.add({ id: genId(), type: 'sale:update', payload: { saleId, batchId, ...data }, timestamp: new Date().toISOString() });
+          refreshPendingCount();
+        }
+      } else {
+        toast.error(err.message || 'Error al actualizar venta.');
+      }
     }
   }, [isOnline, handleLogout, refreshPendingCount]);
 
@@ -390,6 +420,11 @@ function AppContent() {
     if (!isOnline) { deleteSaleOffline(); return; }
     try {
       await api.deleteSale(batchId, saleId, handleLogout);
+      setBatches(prev => {
+        const next = prev.map(b => b.id === batchId ? { ...b, sales: b.sales.filter(s => s.id !== saleId) } : b);
+        offlineStorage.updateBatches(next);
+        return next;
+      });
       toast.success('Venta eliminada.');
     } catch (err) {
       if (isNetworkError(err)) { deleteSaleOffline(); }
