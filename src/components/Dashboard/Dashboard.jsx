@@ -10,6 +10,7 @@ import { CuadreDelDia } from './CuadreDelDia';
 import { DeudaManagement } from './DeudaManagement';
 import { StatCard, EmptyState, Badge } from '../UI/index';
 import { DashboardSkeleton } from '../UI/SkeletonLoader';
+import { offlineQueue } from '../../services/offlineQueue';
 
 const TABS = [
   { id: 'dashboard', label: 'Ventas',    icon: '📦' },
@@ -68,6 +69,197 @@ function SyncButton({ pendingOps, isSyncing, isOnline, onSync }) {
   );
 }
 
+// ── Switch manual de modo offline (solo visible si hay red real) ──────────
+function OfflineSwitch({ networkOnline, forcedOffline, onToggle }) {
+  if (!networkOnline) return null;
+  return (
+    <div className="flex items-center gap-2" title={forcedOffline ? 'Modo offline manual activo' : 'Activar modo offline para probar'}>
+      <span className="text-xs text-gray-400 hidden md:block select-none">
+        {forcedOffline ? 'Offline manual' : 'Simular offline'}
+      </span>
+      <button
+        onClick={onToggle}
+        className={`relative w-10 h-5 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 ${
+          forcedOffline ? 'bg-orange-400 focus:ring-orange-300' : 'bg-gray-200 focus:ring-gray-300'
+        }`}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
+          forcedOffline ? 'translate-x-5' : 'translate-x-0'
+        }`} />
+      </button>
+    </div>
+  );
+}
+
+// Etiqueta legible por tipo de operación encolada
+const OP_LABELS = {
+  'batch:create':     op => `🍞 Crear lote: ${op.payload.breadType} ×${op.payload.quantityMade}`,
+  'batch:delete':     op => `🗑️ Eliminar lote #${op.payload.batchId}`,
+  'sale:create':      op => `🛒 Venta: ${op.payload.personName} ×${op.payload.quantitySold}`,
+  'sale:update':      op => `✏️ Actualizar venta${op.payload.personName ? ' de ' + op.payload.personName : ' #' + op.payload.saleId}`,
+  'sale:delete':      op => `🗑️ Eliminar venta #${op.payload.saleId}`,
+  'gasto:create':     op => `💸 Gasto: $${op.payload.monto} — ${op.payload.concepto || op.payload.descripcion || ''}`,
+  'deuda:create':     op => `📋 Nueva deuda: ${op.payload.persona || op.payload.personName || ''}`,
+  'deuda:update':     op => `📋 Actualizar deuda #${op.payload.deudaId || op.payload.id}`,
+  'inventory:adjust': op => `📦 Ajuste de insumo #${op.payload.itemId}`,
+};
+
+function describeOp(op) {
+  const fn = OP_LABELS[op.type];
+  try { return fn ? fn(op) : op.type; } catch { return op.type; }
+}
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60000)   return 'hace un momento';
+  if (diff < 3600000) return `hace ${Math.floor(diff / 60000)} min`;
+  return `hace ${Math.floor(diff / 3600000)} h`;
+}
+
+const CONFLICT_REASON_LABELS = {
+  deleted:            'Registro eliminado en el servidor',
+  modified_on_server: 'Versión más nueva en el servidor',
+};
+
+// ── Panel de operaciones pendientes + conflictos del último sync ──────────
+function PendingOpsPanel({
+  pendingOps, conflicts = [], isOnline, isSyncing,
+  onSync, refreshPendingCount, onClearConflicts,
+}) {
+  const [isOpen, setIsOpen]               = useState(true);
+  const [showConflicts, setShowConflicts] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  // pendingOps cambia de App al mutar la cola → fuerza re-render y re-lectura.
+  const ops = offlineQueue.get();
+
+  if (pendingOps === 0 && conflicts.length === 0) return null;
+
+  const handleRemove = (id) => {
+    offlineQueue.remove(id);
+    refreshPendingCount();
+  };
+
+  const handleDiscardAll = () => {
+    offlineQueue.clear();
+    refreshPendingCount();
+    onClearConflicts?.();
+    setConfirmDiscard(false);
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+      <div className="card border border-amber-200 overflow-hidden">
+        {/* Header */}
+        <button
+          onClick={() => setIsOpen(p => !p)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-amber-50/60 hover:bg-amber-50 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span>⏳</span>
+            <span className="font-medium text-sm text-amber-800">
+              {pendingOps > 0
+                ? `${pendingOps} operación${pendingOps > 1 ? 'es' : ''} pendiente${pendingOps > 1 ? 's' : ''} de sincronizar`
+                : 'Sincronización completada'}
+            </span>
+            {conflicts.length > 0 && (
+              <span className="badge bg-orange-100 text-orange-700">{conflicts.length} conflicto{conflicts.length > 1 ? 's' : ''}</span>
+            )}
+          </div>
+          <span className={`text-gray-400 text-xs transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}>▼</span>
+        </button>
+
+        {isOpen && (
+          <div className="px-4 py-3 space-y-3">
+            {/* Lista de pendientes */}
+            {ops.length > 0 && (
+              <ul className="space-y-1.5">
+                {ops.map(op => (
+                  <li key={op.id} className="flex items-center gap-2 text-sm bg-gray-50 rounded-lg px-3 py-2">
+                    <span className="flex-1 min-w-0 truncate text-gray-700">{describeOp(op)}</span>
+                    <span className="text-xs text-gray-400 flex-shrink-0">{timeAgo(op.timestamp)}</span>
+                    <button
+                      onClick={() => handleRemove(op.id)}
+                      title="Descartar esta operación"
+                      className="flex-shrink-0 text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      🗑️
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Acordeón de conflictos resueltos */}
+            {conflicts.length > 0 && (
+              <div className="border border-orange-200 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setShowConflicts(p => !p)}
+                  className="w-full flex items-center justify-between px-3 py-2 bg-orange-50/60 hover:bg-orange-50 text-left"
+                >
+                  <span className="text-xs font-medium text-orange-700">
+                    ⚠️ Ver conflictos del último sync ({conflicts.length})
+                  </span>
+                  <span className={`text-orange-400 text-xs transition-transform duration-200 ${showConflicts ? '' : '-rotate-90'}`}>▼</span>
+                </button>
+                {showConflicts && (
+                  <ul className="divide-y divide-orange-100">
+                    {conflicts.map((c, idx) => {
+                      const reason = c.conflict?.reason;
+                      const fields = c.conflict?.fields || [];
+                      return (
+                        <li key={c.clientId || idx} className="px-3 py-2 text-xs text-gray-600 space-y-1">
+                          <div className="font-medium text-orange-700">
+                            {CONFLICT_REASON_LABELS[reason] || 'Conflicto'} — el servidor mantuvo su versión.
+                          </div>
+                          {fields.map((f, i) => (
+                            <div key={i} className="text-gray-500">
+                              Campo <span className="font-mono">{f.field}</span>: servidor =
+                              <span className="font-medium"> {String(f.serverValue)}</span> · intentado =
+                              <span className="font-medium"> {String(f.clientValue)}</span>
+                            </div>
+                          ))}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {/* Acciones */}
+            {(ops.length > 0 || conflicts.length > 0) && (
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                {ops.length > 0 && (
+                  <button
+                    onClick={onSync}
+                    disabled={!isOnline || isSyncing}
+                    className={`btn btn-sm ${isOnline && !isSyncing ? 'btn-primary' : 'btn-secondary opacity-60 cursor-not-allowed'}`}
+                    title={isOnline ? 'Sincronizar ahora' : 'Sin conexión — se sincronizará al reconectar'}
+                  >
+                    {isSyncing ? '🔄 Sincronizando…' : '🔄 Sincronizar ahora'}
+                  </button>
+                )}
+                {confirmDiscard ? (
+                  <span className="flex items-center gap-2 text-xs text-gray-600">
+                    ¿Descartar todo?
+                    <button onClick={handleDiscardAll} className="btn btn-sm btn-danger">Sí, descartar</button>
+                    <button onClick={() => setConfirmDiscard(false)} className="btn btn-sm btn-secondary">Cancelar</button>
+                  </span>
+                ) : (
+                  <button onClick={() => setConfirmDiscard(true)} className="btn btn-sm btn-secondary">
+                    Descartar todo
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard({
   user,
   batches,
@@ -82,9 +274,15 @@ export function Dashboard({
   getPermissions,
   socketStatus = 'disconnected',
   isOnline = true,
+  networkOnline = true,
+  forcedOffline = false,
+  onToggleForcedOffline,
   pendingOps = 0,
   isSyncing = false,
   onSync,
+  lastSyncConflicts = [],
+  refreshPendingCount,
+  onClearConflicts,
 }) {
   const [activeTab, setActiveTab]     = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
@@ -178,6 +376,7 @@ export function Dashboard({
               <span className="font-display font-semibold text-gray-900 hidden sm:block">Panadería Digital</span>
             </div>
             <div className="flex items-center gap-2">
+              <OfflineSwitch networkOnline={networkOnline} forcedOffline={forcedOffline} onToggle={onToggleForcedOffline} />
               <SyncButton pendingOps={pendingOps} isSyncing={isSyncing} isOnline={isOnline} onSync={onSync} />
               <ConnectionBadge status={socketStatus} isOnline={isOnline} />
 
@@ -197,13 +396,23 @@ export function Dashboard({
       </header>
 
       {/* Banners de estado */}
-      {!isOnline && (
+      {!networkOnline && (
         <div className="bg-orange-50 border-b border-orange-200 px-4 py-2.5 text-center">
           <span className="text-xs text-orange-800 font-medium">
             📵 Sin internet — trabajando en modo offline. Tus cambios se guardan localmente
             {pendingOps > 0 && ` (${pendingOps} pendiente${pendingOps > 1 ? 's' : ''})`}
             {' '}y se sincronizarán automáticamente al reconectar.
           </span>
+        </div>
+      )}
+      {forcedOffline && networkOnline && (
+        <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-2 text-sm text-orange-700">
+          <span>🧪</span>
+          <span className="font-medium">Modo offline manual</span>
+          <span className="text-orange-600/80">— Las operaciones se guardan localmente.</span>
+          <button onClick={onToggleForcedOffline} className="ml-auto text-xs underline hover:text-orange-900">
+            Volver a online
+          </button>
         </div>
       )}
       {isOnline && socketStatus === 'reconnecting' && (
@@ -221,6 +430,17 @@ export function Dashboard({
           </span>
         </div>
       )}
+
+      {/* Panel de pendientes + conflictos (debajo de banners, encima de tabs) */}
+      <PendingOpsPanel
+        pendingOps={pendingOps}
+        conflicts={lastSyncConflicts}
+        isOnline={isOnline}
+        isSyncing={isSyncing}
+        onSync={onSync}
+        refreshPendingCount={refreshPendingCount}
+        onClearConflicts={onClearConflicts}
+      />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         {/* Tabs */}

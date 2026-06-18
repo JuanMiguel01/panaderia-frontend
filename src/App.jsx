@@ -26,8 +26,11 @@ function AppContent() {
   const [socketStatus, setSocketStatus] = useState('disconnected');
   const [pendingOps, setPendingOps]   = useState(0);
   const [isSyncing, setIsSyncing]     = useState(false);
+  const [forcedOffline, setForcedOffline]       = useState(false);
+  const [lastSyncConflicts, setLastSyncConflicts] = useState([]);
 
-  const isOnline    = useOnlineStatus();
+  const networkOnline = useOnlineStatus();              // conexión real del dispositivo
+  const isOnline      = networkOnline && !forcedOffline; // online efectivo (red + switch manual)
   const toast       = useToast();
   const syncingRef  = useRef(false);
   const userRef     = useRef(null);
@@ -116,27 +119,41 @@ function AppContent() {
     try {
       const { results } = await api.syncOperations(queue, handleLogout);
 
-      let ok = 0, fail = 0;
-      for (const r of results) {
-        if (r.status === 'success' || r.status === 'already_synced') {
-          offlineQueue.remove(r.clientId);
-          ok++;
-        } else {
-          fail++;
-        }
-      }
+      const okResults       = results.filter(r => r.status === 'success' || r.status === 'already_synced');
+      const conflictResults = results.filter(r => r.status === 'conflict');
+      const failResults     = results.filter(r => r.status === 'error');
+
+      // Remover de la cola lo exitoso y lo conflictivo (los conflictos no se reintentan;
+      // el servidor ya tiene la versión final). Solo los errores se reintentan.
+      [...okResults, ...conflictResults].forEach(r => offlineQueue.remove(r.clientId));
 
       refreshPendingCount();
+      setLastSyncConflicts(conflictResults);
 
+      const ok = okResults.length;
       if (ok > 0) {
         toast.success(`${ok} operación${ok > 1 ? 'es' : ''} sincronizada${ok > 1 ? 's' : ''}.`);
-        // Refrescar estado desde servidor con snapshot fresco
+      }
+
+      if (conflictResults.length > 0) {
+        const deletedCount  = conflictResults.filter(c => c.conflict?.reason === 'deleted').length;
+        const modifiedCount = conflictResults.filter(c => c.conflict?.reason === 'modified_on_server').length;
+        const parts = [];
+        if (deletedCount)  parts.push(`${deletedCount} operación${deletedCount > 1 ? 'es' : ''} sobre registros eliminados`);
+        if (modifiedCount) parts.push(`${modifiedCount} cambio${modifiedCount > 1 ? 's' : ''} con versión más nueva en servidor`);
+        toast.warning(`Conflictos resueltos: ${parts.join(' y ')}. El servidor tiene la versión final.`);
+      }
+
+      if (failResults.length > 0) {
+        const fail = failResults.length;
+        toast.error(`${fail} operación${fail > 1 ? 'es fallaron' : ' falló'} al sincronizar.`);
+      }
+
+      // Refrescar estado desde servidor con snapshot fresco si algo cambió.
+      if (ok > 0 || conflictResults.length > 0) {
         const snapshot = await api.getSnapshot(handleLogout);
         setBatches(snapshot.batches || []);
         offlineStorage.saveSnapshot(snapshot);
-      }
-      if (fail > 0) {
-        toast.error(`${fail} operación${fail > 1 ? 'es fallaron' : ' falló'} al sincronizar.`);
       }
     } catch {
       toast.error('Error al sincronizar. Se reintentará al reconectar.');
@@ -199,6 +216,13 @@ function AppContent() {
       loadData();
     }
   }, [isOnline]);
+
+  // ── Al desactivar el modo offline manual (con red disponible) → sincronizar la cola
+  useEffect(() => {
+    if (!forcedOffline && networkOnline && user && token && offlineQueue.size() > 0) {
+      flushQueue();
+    }
+  }, [forcedOffline, networkOnline]);
 
   // ── Socket.IO ───────────────────────────────────────────────
   useEffect(() => {
@@ -456,9 +480,15 @@ function AppContent() {
       presets={presets}
       socketStatus={socketStatus}
       isOnline={isOnline}
+      networkOnline={networkOnline}
+      forcedOffline={forcedOffline}
+      onToggleForcedOffline={() => setForcedOffline(p => !p)}
       pendingOps={pendingOps}
       isSyncing={isSyncing}
       onSync={flushQueue}
+      lastSyncConflicts={lastSyncConflicts}
+      refreshPendingCount={refreshPendingCount}
+      onClearConflicts={() => setLastSyncConflicts([])}
       onLogout={handleLogout}
       handleCreateBatch={handleCreateBatch}
       handleDeleteBatch={handleDeleteBatch}
